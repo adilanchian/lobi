@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lobi — Session History</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .history-page {
+      width: 100%; height: 100%;
+      display: flex;
+      flex-direction: column;
+      padding: 0 24px 24px;
+    }
+
+    .history-header {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .session-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .session-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 14px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .session-score {
+      font-size: 26px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1;
+      flex-shrink: 0;
+      width: 42px;
+      text-align: center;
+    }
+
+    .session-meta {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .session-date {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .session-details {
+      font-size: 11px;
+      color: var(--muted);
+    }
+
+    .session-peak {
+      font-size: 11px;
+      color: var(--muted);
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 13px;
+      gap: 8px;
+      text-align: center;
+    }
+
+    .empty-icon { font-size: 36px; }
+  </style>
+</head>
+<body>
+
+<div class="history-page">
+
+  <div class="drag-region history-header" style="padding-left:76px;">
+    <span class="app-name">Session History</span>
+  </div>
+
+  <div class="session-list" id="session-list">
+    <div class="empty-state" id="empty-state">
+      <span class="empty-icon">📊</span>
+      <span>No sessions yet.<br>End a session from the dashboard to save it.</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  function scoreColour(s) {
+    return s >= 70 ? 'var(--green)' : s >= 40 ? 'var(--yellow)' : 'var(--red)'
+  }
+
+  function formatDuration(ms) {
+    const m = Math.round(ms / 60_000)
+    if (m < 60) return `${m}m`
+    const h = Math.floor(m / 60)
+    const rem = m % 60
+    return rem > 0 ? `${h}h ${rem}m` : `${h}h`
+  }
+
+  function formatDate(ts) {
+    const d    = new Date(ts)
+    const now  = new Date()
+    const isToday = d.toDateString() === now.toDateString()
+    const yesterday = new Date(now)
+    yesterday.setDate(now.getDate() - 1)
+    const isYesterday = d.toDateString() === yesterday.toDateString()
+
+    const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    if (isToday)     return `Today, ${time}`
+    if (isYesterday) return `Yesterday, ${time}`
+    return d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + `, ${time}`
+  }
+
+  async function load() {
+    const sessions = await window.lobi.getSessions()
+    if (!sessions.length) return
+
+    document.getElementById('empty-state').remove()
+
+    const list = document.getElementById('session-list')
+    list.innerHTML = sessions.map(s => `
+      <div class="session-card">
+        <div class="session-score" style="color:${scoreColour(s.avgScore)}">${s.avgScore}</div>
+        <div class="session-meta">
+          <div class="session-date">${formatDate(s.startTime)}</div>
+          <div class="session-details">${formatDuration(s.durationMs)} · ${s.insightCount} insight${s.insightCount !== 1 ? 's' : ''}</div>
+        </div>
+        <div class="session-peak">
+          <div style="font-size:10px; margin-bottom:2px;">Peak</div>
+          <div style="font-weight:700; color:${scoreColour(s.peakScore)}">${s.peakScore}</div>
+        </div>
+      </div>
+    `).join('')
+  }
+
+  load()
+</script>
+
+</body>
+</html>

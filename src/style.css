@@ -1,0 +1,272 @@
+/* style.css — Shared styles for all Lobi pages */
+
+/* ─── Variables ──────────────────────────────────────────────────────────────── */
+
+:root {
+  --bg:        #0e0e16;   /* deep dark background */
+  --surface:   #17172a;   /* card / panel surface */
+  --border:    #2a2a42;   /* subtle borders */
+  --text:      #e8e8f5;   /* primary text */
+  --muted:     #6b6b8c;   /* secondary / placeholder text */
+  --accent:    #8b5cf6;   /* Lobi purple */
+  --green:     #34d399;   /* focused — good */
+  --yellow:    #fbbf24;   /* drifting — caution */
+  --red:       #f87171;   /* low / need break */
+}
+
+/* ─── Reset ──────────────────────────────────────────────────────────────────── */
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* ─── Drag region (macOS hidden title bar) ───────────────────────────────────── */
+
+.drag-region {
+  -webkit-app-region: drag;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.no-drag { -webkit-app-region: no-drag; }
+
+/* ─── Typography ─────────────────────────────────────────────────────────────── */
+
+h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.3px; }
+h2 { font-size: 16px; font-weight: 600; }
+p  { line-height: 1.55; color: var(--muted); }
+
+/* ─── Buttons ────────────────────────────────────────────────────────────────── */
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 24px;
+  transition: opacity 0.15s, transform 0.1s;
+  -webkit-app-region: no-drag;
+}
+
+button:active { transform: scale(0.97); }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  width: 100%;
+}
+
+.btn-primary:hover  { opacity: 0.88; }
+.btn-primary:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
+
+/* ─── Cards ──────────────────────────────────────────────────────────────────── */
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+
+/* ─── Focus Ring ─────────────────────────────────────────────────────────────── */
+
+.ring-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.ring-wrap svg { transform: rotate(-90deg); }
+
+.ring-bg    { stroke: var(--border); }
+.ring-score {
+  stroke: var(--green);
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease, stroke 0.6s ease;
+}
+
+.ring-label {
+  position: absolute;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.ring-number {
+  font-size: 44px;
+  font-weight: 800;
+  letter-spacing: -2px;
+  line-height: 1;
+}
+
+.ring-status {
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+
+/* ─── Insight Feed ───────────────────────────────────────────────────────────── */
+
+.insights-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.insight-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.insight-item .title { font-weight: 600; font-size: 13px; }
+.insight-item .body  { font-size: 12px; color: var(--muted); }
+.insight-item .time  { font-size: 11px; color: var(--border); margin-top: 2px; }
+
+.empty-state {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* ─── Status Dot ─────────────────────────────────────────────────────────────── */
+
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  display: inline-block;
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+.status-dot.green  { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.status-dot.yellow { background: var(--yellow); }
+.status-dot.red    { background: var(--red); }
+
+/* ─── Onboarding ─────────────────────────────────────────────────────────────── */
+
+.onboarding-page {
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 32px 32px;
+}
+
+.step { display: none; flex-direction: column; flex: 1; }
+.step.active { display: flex; }
+
+.step-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+
+.step-icon { font-size: 52px; line-height: 1; margin-bottom: 4px; }
+
+.progress-dots {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--border);
+  transition: background 0.3s;
+}
+.dot.active { background: var(--accent); }
+
+/* ─── Camera Preview ─────────────────────────────────────────────────────────── */
+
+.camera-preview {
+  width: 100%;
+  aspect-ratio: 4/3;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  object-fit: cover;
+  transform: scaleX(-1); /* mirror the feed — feels more natural */
+}
+
+.camera-status {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--muted);
+  gap: 6px;
+}
+
+/* ─── Dashboard Layout ───────────────────────────────────────────────────────── */
+
+.dashboard-page {
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 0 20px 20px;
+  gap: 16px;
+}
+
+.dashboard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-right: 4px;
+}
+
+.app-name {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.icon-btn {
+  background: transparent;
+  padding: 6px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 16px;
+}
+
+.icon-btn:hover { background: var(--surface); color: var(--text); }
+
+.section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.tracker-offline {
+  padding: 20px;
+  text-align: center;
+  color: var(--red);
+  font-size: 13px;
+}

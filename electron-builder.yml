@@ -1,0 +1,55 @@
+appId: com.lobi.app
+productName: Lobi
+
+directories:
+  output: dist
+
+files:
+  - src/**/*
+  - assets/**/*
+  - scripts/**/*
+  - package.json
+
+# ── macOS ────────────────────────────────────────────────────────────────────
+mac:
+  category: public.app-category.productivity
+  icon: assets/icon.icns
+
+  identity: "Wind Down Studio, LLC (UWMZP3Q26H)"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+
+  entitlements: assets/entitlements.mac.plist
+  entitlementsInherit: assets/entitlements.mac.plist
+
+  # Built-in notarization — reads APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD from env
+  notarize:
+    teamId: "UWMZP3Q26H"
+
+  # Shown in macOS permission dialogs
+  extendInfo:
+    NSCameraUsageDescription: "Lobi uses your camera to track eye movements and monitor focus. Video is processed locally and never leaves your device."
+    NSMicrophoneUsageDescription: "Lobi does not use the microphone."
+
+  target:
+    - target: dmg
+
+dmg:
+  title: "Lobi"
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+
+# ── Windows (for later) ──────────────────────────────────────────────────────
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lobi</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Sub-score bars ──────────────────────────────────────────────────── */
+    .sub-scores { display: flex; flex-direction: column; gap: 9px; flex: 1; }
+
+    .sub-score-row {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .sub-score-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 11px;
+    }
+
+    .sub-score-label { color: var(--muted); font-weight: 500; }
+    .sub-score-value { font-weight: 700; font-size: 12px; font-family: monospace; }
+
+    .sub-score-track {
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .sub-score-fill {
+      height: 100%;
+      border-radius: 3px;
+      background: var(--green);
+      transition: width 0.7s ease, background-color 0.7s ease;
+    }
+
+    /* ── Signal card (camera + bars side by side) ────────────────────────── */
+    .signal-card {
+      display: flex;
+      gap: 14px;
+      align-items: flex-start;
+    }
+
+    .camera-thumb {
+      width: 88px;
+      height: 66px;
+      border-radius: 8px;
+      object-fit: cover;
+      transform: scaleX(-1);
+      background: var(--surface);
+      flex-shrink: 0;
+    }
+
+    /* ── Calibrating pulse ───────────────────────────────────────────────── */
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .calibrating { animation: pulse 1.8s ease-in-out infinite; }
+  </style>
+</head>
+<body>
+
+<div class="dashboard-page">
+
+  <!-- macOS traffic-light spacer -->
+  <div class="drag-region" style="display:flex; align-items:flex-end; justify-content:flex-end;">
+    <button class="icon-btn no-drag" onclick="window.lobi.resetOnboarding()" title="Re-run onboarding" style="font-size:13px; color:var(--muted); padding:2px 6px;">↺ Setup</button>
+  </div>
+
+  <!-- ── Focus Ring ──────────────────────────────────────────────────────── -->
+  <div class="ring-wrap">
+    <svg width="168" height="168" viewBox="0 0 200 200">
+      <circle class="ring-bg"    cx="100" cy="100" r="80" fill="none" stroke-width="10"/>
+      <circle class="ring-score" cx="100" cy="100" r="80" fill="none" stroke-width="10"
+              id="ring" stroke-dasharray="502.65" stroke-dashoffset="0"/>
+    </svg>
+    <div class="ring-label">
+      <span class="ring-number" id="score-number">--</span>
+    </div>
+  </div>
+
+  <!-- ── Status + session time (stacked under the ring) ─────────────────── -->
+  <div style="text-align:center; display:flex; flex-direction:column; gap:4px; margin-top:-6px;">
+    <div id="score-status" class="ring-status">Loading...</div>
+    <div id="session-time" style="font-size:10px; color:var(--muted);">Session: 0m</div>
+  </div>
+
+  <!-- ── Quick actions: history (left) + session control (right) ──────────── -->
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <button class="icon-btn no-drag" onclick="window.lobi.openHistory()"
+      style="font-size:12px; padding:6px 14px; border:1px solid var(--border); border-radius:8px; color:var(--muted); background:var(--surface);">
+      📊 History
+    </button>
+    <button id="btn-session" class="no-drag"
+      style="background:none; border:1px solid var(--border); border-radius:8px; font-size:11px; color:var(--muted); cursor:pointer; padding:6px 14px; font-family:inherit;">
+      End Session
+    </button>
+  </div>
+
+  <!-- ── Signal card: camera + sub-score bars ───────────────────────────── -->
+  <div class="card signal-card">
+
+    <!-- Camera preview -->
+    <video id="tracking-video" class="camera-thumb" autoplay muted playsinline></video>
+
+    <!-- Sub-score bars -->
+    <div class="sub-scores">
+
+      <div class="sub-score-row">
+        <div class="sub-score-header">
+          <span class="sub-score-label">👁 Eye Comfort</span>
+          <span class="sub-score-value" id="val-eye">--</span>
+        </div>
+        <div class="sub-score-track"><div class="sub-score-fill" id="bar-eye" style="width:100%"></div></div>
+      </div>
+
+      <div class="sub-score-row">
+        <div class="sub-score-header">
+          <span class="sub-score-label">🧠 Engagement</span>
+          <span class="sub-score-value" id="val-focus">--</span>
+        </div>
+        <div class="sub-score-track"><div class="sub-score-fill" id="bar-focus" style="width:100%"></div></div>
+      </div>
+
+      <div class="sub-score-row">
+        <div class="sub-score-header">
+          <span class="sub-score-label">🪑 Posture</span>
+          <span class="sub-score-value" id="val-posture">--</span>
+        </div>
+        <div class="sub-score-track"><div class="sub-score-fill" id="bar-posture" style="width:100%"></div></div>
+      </div>
+
+      <div class="sub-score-row">
+        <div class="sub-score-header">
+          <span class="sub-score-label">⏱ Stamina</span>
+          <span class="sub-score-value" id="val-stamina">--</span>
+        </div>
+        <div class="sub-score-track"><div class="sub-score-fill" id="bar-stamina" style="width:100%"></div></div>
+      </div>
+
+
+    </div>
+  </div>
+
+  <!-- ── Insights Feed ──────────────────────────────────────────────────── -->
+  <div style="flex:1; min-height:0; overflow-y:auto;">
+    <div class="section-label">Recent Insights</div>
+    <div id="insights-list">
+      <div class="empty-state" id="empty-state">
+        Insights will appear here as Lobi monitors your focus.<br>
+        <span style="opacity:0.5">Keep working — it's watching 👀</span>
+      </div>
+    </div>
+  </div>
+
+  <div id="tracker-error" style="display:none" class="tracker-offline"></div>
+
+</div>
+
+<script type="module">
+  import { Tracker }       from './tracker.js'
+  // import { DrinkDetector } from './drink-detector.js'  // WATER TRACKING — re-enable when ready
+  import { InsightEngine } from './insights.js'
+
+  const CIRCUMFERENCE = 502.65
+
+  const ring        = document.getElementById('ring')
+  const scoreNum    = document.getElementById('score-number')
+  const scoreStat   = document.getElementById('score-status')
+  const insightList = document.getElementById('insights-list')
+  const emptyState  = document.getElementById('empty-state')
+  const errorBanner = document.getElementById('tracker-error')
+  const sessionLbl  = document.getElementById('session-time')
+  // const drinkLbl = document.getElementById('drink-count')  // WATER TRACKING
+
+  let engine  = new InsightEngine()
+  let tracker = null
+  const video = document.getElementById('tracking-video')
+
+  // ── Tray icon — score number drawn on a canvas, sent to main as PNG ───────
+  let lastTrayScore = -1
+  const trayCanvas  = document.createElement('canvas')
+  trayCanvas.width  = 36   // 18px effective at @2x Retina
+  trayCanvas.height = 36
+  const trayCtx = trayCanvas.getContext('2d')
+
+  function updateTrayIcon(score) {
+    if (score === lastTrayScore) return
+    lastTrayScore = score
+
+    const idle = score == null
+    const hex  = idle ? '#6b7280' : score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171'
+    const text = idle ? '–' : String(score)
+
+    trayCtx.clearRect(0, 0, 36, 36)
+    trayCtx.fillStyle  = hex
+    trayCtx.font       = `700 ${text.length > 2 ? 18 : 22}px -apple-system, sans-serif`
+    trayCtx.textAlign  = 'center'
+    trayCtx.textBaseline = 'middle'
+    trayCtx.fillText(text, 18, 19)
+
+    window.lobi?.updateTrayIcon(trayCanvas.toDataURL('image/png'))
+  }
+
+  // ── Helper: update one sub-score bar ─────────────────────────────────────
+  function updateBar(barId, valId, value) {
+    const fill  = document.getElementById(barId)
+    const label = document.getElementById(valId)
+    if (!fill || !label) return
+    fill.style.width      = value + '%'
+    fill.style.background = value >= 70 ? 'var(--green)' : value >= 40 ? 'var(--yellow)' : 'var(--red)'
+    label.textContent     = value
+    label.style.color     = value >= 70 ? 'var(--green)' : value >= 40 ? 'var(--yellow)' : 'var(--red)'
+  }
+
+  // ── Main update — called ~15x/sec ─────────────────────────────────────────
+  function onTrackingUpdate(data) {
+    engine.update(data)
+
+    const score  = engine.score
+    const colour = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--yellow)' : 'var(--red)'
+
+    // Ring
+    ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - score / 100)
+    ring.style.stroke = colour
+
+    // Score label
+    scoreNum.textContent = score
+    scoreNum.style.color = colour
+    scoreStat.textContent = engine.status
+    scoreStat.classList.toggle('calibrating', engine.isCalibrating)
+
+    // Sub-score bars
+    updateBar('bar-eye',     'val-eye',     engine.subScores.eyeComfort)
+    updateBar('bar-focus',   'val-focus',   engine.subScores.focusLock)
+    updateBar('bar-posture', 'val-posture', engine.subScores.posture)
+    updateBar('bar-stamina', 'val-stamina', engine.subScores.stamina)
+
+    // Session timer — only update while a session is actively running
+    if (sessionRunning) sessionLbl.textContent = `Session: ${engine.sessionMinutes}m`
+
+    // Enable "End Session" the moment calibration finishes
+    if (sessionRunning) setSessionBtnEnabled(!engine.isCalibrating)
+
+    updateTrayIcon(score)
+    window.lobi?.updateTrayStatus(engine.status)
+  }
+
+  // WATER TRACKING — uncomment when drink-detector is ready
+  // function onDrinkUpdate({ drinkCount, justDrank }) {
+  //   drinkLbl.textContent = `💧 ${drinkCount}`
+  //   if (justDrank) {
+  //     drinkLbl.style.color     = 'var(--green)'
+  //     drinkLbl.style.transform = 'scale(1.2)'
+  //     setTimeout(() => {
+  //       drinkLbl.style.color     = ''
+  //       drinkLbl.style.transform = ''
+  //     }, 600)
+  //   }
+  // }
+
+  // ── Session state machine ────────────────────────────────────────────────
+  let sessionRunning = true
+  const sessionBtn   = document.getElementById('btn-session')
+
+  // End-Session button is disabled while calibrating. Flag avoids redundant DOM writes
+  // since onTrackingUpdate fires ~15x/sec.
+  let sessionBtnEnabled = false
+  function setSessionBtnEnabled(enabled) {
+    if (enabled === sessionBtnEnabled) return
+    sessionBtnEnabled        = enabled
+    sessionBtn.disabled      = !enabled
+    sessionBtn.style.opacity = enabled ? '' : '0.4'
+    sessionBtn.style.cursor  = enabled ? 'pointer' : 'not-allowed'
+  }
+  setSessionBtnEnabled(false)   // start disabled — flips on once first calibration lands
+
+  async function endSession() {
+    if (engine.isCalibrating) return  // button is disabled, but guard defensively
+
+    const data = engine.getSessionData()
+    await window.lobi.saveSession(data)
+
+    tracker?.stop()
+    tracker = null
+
+    sessionRunning         = false
+    sessionLbl.textContent = 'Session saved ✓'
+    sessionBtn.textContent = '▶ New Session'
+    sessionBtn.style.color = 'var(--green)'
+    setSessionBtnEnabled(true)   // "New Session" is always clickable
+
+    // Freeze / dim the UI — nothing is monitoring
+    ring.style.opacity       = '0.3'
+    scoreNum.textContent     = '--'
+    scoreStat.textContent    = 'No active session'
+    scoreStat.classList.remove('calibrating')
+    video.srcObject          = null
+
+    updateTrayIcon(null)
+    window.lobi?.updateTrayStatus('No active session')
+  }
+
+  async function startNewSession() {
+    engine                 = new InsightEngine()
+    sessionRunning         = true
+    sessionLbl.textContent = 'Session: 0m'
+    sessionBtn.textContent = 'End Session'
+    sessionBtn.style.color = ''
+    setSessionBtnEnabled(false)   // re-lock until the next calibration completes
+    ring.style.opacity     = ''
+    scoreStat.textContent  = 'Loading...'
+
+    try {
+      tracker = await Tracker.start(video, onTrackingUpdate)
+    } catch (err) {
+      console.error('[lobi] tracker error:', err)
+      errorBanner.style.display = 'block'
+      errorBanner.textContent   = err.name === 'NotAllowedError'
+        ? '📵 Camera access denied. Allow it in System Settings and relaunch.'
+        : `⚠️ ${err.message}`
+      scoreStat.textContent = 'Error'
+    }
+  }
+
+  // Wire up via addEventListener — inline onclick can't reach module-scoped functions
+  sessionBtn.addEventListener('click', () => {
+    if (sessionRunning) endSession()
+    else startNewSession()
+  })
+
+  // ── Rebuild insights feed on each new insight ─────────────────────────────
+  function refreshInsights() {
+    if (!engine.recentInsights.length) return
+    emptyState.style.display = 'none'
+    insightList.innerHTML = engine.recentInsights.map(i => `
+      <div class="insight-item">
+        <span class="title">${i.title}</span>
+        <span class="body">${i.body}</span>
+        <span class="time">${i.time}</span>
+      </div>
+    `).join('')
+  }
+
+  window.addEventListener('lobi-insight', refreshInsights)
+
+  // ── Boot ──────────────────────────────────────────────────────────────────
+  async function start() {
+    try {
+      scoreStat.textContent = 'Loading...'
+      tracker = await Tracker.start(video, onTrackingUpdate)
+      // WATER TRACKING — re-enable when drink-detector is ready
+      // DrinkDetector.start(video, onDrinkUpdate).catch(err =>
+      //   console.warn('[lobi] drink detector unavailable:', err))
+      scoreStat.textContent = 'Calibrating...'
+    } catch (err) {
+      console.error('[lobi] tracker error:', err)
+      errorBanner.style.display = 'block'
+      errorBanner.textContent = err.name === 'NotAllowedError'
+        ? '📵 Camera access denied. Allow it in System Settings and relaunch.'
+        : !navigator.onLine
+          ? '🌐 Internet required on first launch to download the tracking model.'
+          : `⚠️ ${err.message}`
+      scoreStat.textContent = 'Error'
+    }
+  }
+
+  start()
+</script>
+
+</body>
+</html>

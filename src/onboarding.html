@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lobi — Setup</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    /* ── Notification step ───────────────────────────────────────────────── */
+    .notification-preview {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 13px 15px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      text-align: left;
+    }
+    .notif-icon { font-size: 26px; flex-shrink: 0; margin-top: 1px; }
+    .notif-app  { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+    .notif-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+    .notif-body  { font-size: 12px; color: var(--muted); line-height: 1.4; }
+
+    .btn-skip {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      padding: 10px;
+      width: 100%;
+      text-align: center;
+      border-radius: 10px;
+      transition: color 0.15s;
+    }
+    .btn-skip:hover { color: var(--text); }
+  </style>
+</head>
+<body>
+
+<div class="onboarding-page">
+
+  <!-- macOS traffic-light spacer -->
+  <div class="drag-region"></div>
+
+  <!-- Step progress dots -->
+  <div class="progress-dots" id="dots">
+    <div class="dot active"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+    <div class="dot"></div>
+  </div>
+
+  <!-- ── Step 1: Welcome ──────────────────────────────────────────────────── -->
+  <div class="step active" id="step-1">
+    <div class="step-content">
+      <div class="step-icon">🧠</div>
+      <h1>Hey, I'm Lobi.</h1>
+      <p>
+        I help you understand your brain state and give you a nudge before focus fully fades. Together we'll keep your brain feeling sharp, clear and healthy.
+      </p>
+      <ul style="color: var(--muted); padding-left: 18px; line-height: 2;">
+        <li>👁&ensp; Track blink rate &amp; eye focus signals</li>
+        <li>📊&ensp; Score your focus in real-time</li>
+        <li>🔔&ensp; Alert you when it's time for a break</li>
+      </ul>
+    </div>
+    <button class="btn-primary" onclick="goTo(2)">Get Started →</button>
+  </div>
+
+  <!-- ── Step 2: Camera ───────────────────────────────────────────────────── -->
+  <div class="step" id="step-2">
+    <div class="step-content">
+      <div class="step-icon">📸</div>
+      <h1>Allow camera access</h1>
+      <p>
+        Lobi uses your camera to track your blink rate. Your video and data is 100% private and
+        <strong style="color: var(--text)">never leaves your computer</strong>
+      </p>
+
+      <video id="camera-preview" class="camera-preview" autoplay muted playsinline></video>
+
+      <div class="camera-status" id="camera-status">
+        <span class="status-dot" id="cam-dot"></span>
+        <span id="cam-label">Waiting for camera permission…</span>
+      </div>
+    </div>
+    <button class="btn-primary no-drag" id="btn-next-2" onclick="goTo(3)" disabled>
+      Looks good! →
+    </button>
+  </div>
+
+  <!-- ── Step 3: Notifications ───────────────────────────────────────────── -->
+  <div class="step" id="step-3">
+    <div class="step-content">
+      <div class="step-icon">🔔</div>
+      <h1>Stay in the loop</h1>
+      <p>
+        Lobi sends a gentle nudge when your brain’s running on low so you can reset.
+      </p>
+
+      <div style="display:flex; flex-direction:column; gap:8px; margin-top:4px;">
+        <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:1px; color:var(--muted);">Example</div>
+        <div class="notification-preview">
+          <div class="notif-icon">🧠</div>
+          <div>
+            <div class="notif-app">Lobi</div>
+            <div class="notif-title">Time for a micro break</div>
+            <div class="notif-body">Your brain readiness is dipping. A 2-minute reset will keep you sharp.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-primary no-drag" onclick="allowNotifications()">Allow Notifications →</button>
+    <button class="btn-skip no-drag" onclick="skipNotifications()">Skip for now</button>
+  </div>
+
+  <!-- ── Step 4: Ready ────────────────────────────────────────────────────── -->
+  <div class="step" id="step-4">
+    <div class="step-content">
+      <div class="step-icon">✅</div>
+      <h1>You're all set!</h1>
+      <p>Lobi will monitor your brain health in the background and tap your shoulder when you need it.</p>
+
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 8px;">
+        <div class="card" style="display: flex; gap: 12px; align-items: center;">
+          <span style="font-size: 20px;">🧘</span>
+          <div>
+            <div style="font-weight: 600; font-size: 13px;">Micro breaks</div>
+            <div style="font-size: 12px; color: var(--muted);">Short nudges to rest your eyes and reset focus</div>
+          </div>
+        </div>
+        <div class="card" style="display: flex; gap: 12px; align-items: center;">
+          <span style="font-size: 20px;">🔥</span>
+          <div>
+            <div style="font-weight: 600; font-size: 13px;">Focus milestones</div>
+            <div style="font-size: 12px; color: var(--muted);">Recognised when you lock in for long sessions</div>
+          </div>
+        </div>
+        <div class="card" style="display: flex; gap: 12px; align-items: center;">
+          <span style="font-size: 20px;">😴</span>
+          <div>
+            <div style="font-weight: 600; font-size: 13px;">Fatigue detection</div>
+            <div style="font-size: 12px; color: var(--muted);">Notified when blink patterns suggest strain</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <button class="btn-primary no-drag" onclick="finish()">Let's Go →</button>
+  </div>
+
+</div>
+
+<script>
+  let currentStep = 1
+  let cameraStream = null
+  let notificationsEnabled = false
+
+  function goTo(n) {
+    document.getElementById(`step-${currentStep}`).classList.remove('active')
+    document.getElementById(`step-${n}`).classList.add('active')
+    currentStep = n
+
+    // Update progress dots
+    document.querySelectorAll('.dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i < n)
+    })
+
+    if (n === 2) startCamera()
+  }
+
+  async function allowNotifications() {
+    notificationsEnabled = true
+    await window.lobi.requestNotificationPermission()
+    goTo(4)
+  }
+
+  function skipNotifications() {
+    notificationsEnabled = false
+    goTo(4)
+  }
+
+  async function startCamera() {
+    const video  = document.getElementById('camera-preview')
+    const dot    = document.getElementById('cam-dot')
+    const label  = document.getElementById('cam-label')
+    const btn    = document.getElementById('btn-next-2')
+
+    try {
+      // Step 1 — Ask macOS for camera permission via the native system dialog
+      label.textContent = 'Asking macOS for camera access...'
+      const granted = await window.lobi.requestCameraPermission()
+
+      if (!granted) {
+        dot.classList.add('red')
+        label.textContent = 'Camera access denied. Go to System Settings → Privacy & Security → Camera and allow Electron.'
+        return
+      }
+
+      // Step 2 — Now that macOS has granted permission, open the camera stream
+      label.textContent = 'Starting camera...'
+      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
+      video.srcObject = cameraStream
+      await video.play()
+
+      dot.classList.add('green')
+      label.textContent = 'Camera is working!'
+      btn.disabled = false
+
+    } catch (err) {
+      dot.classList.add('red')
+      label.textContent = err.name === 'NotAllowedError'
+        ? 'Camera access was denied. Allow it in System Settings → Privacy & Security → Camera.'
+        : `Camera error: ${err.message}`
+    }
+  }
+
+  function finish() {
+    // Stop the preview stream — the dashboard will start its own tracking stream
+    cameraStream?.getTracks().forEach(t => t.stop())
+    window.lobi.completeOnboarding({ notificationsEnabled })
+  }
+</script>
+
+</body>
+</html>

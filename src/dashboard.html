@@ -158,6 +158,15 @@
 
   <div id="tracker-error" style="display:none" class="tracker-offline"></div>
 
+  <!-- ── Footer: version + update ──────────────────────────────────────────── -->
+  <div style="display:flex; justify-content:space-between; align-items:center; padding-top:6px; border-top:1px solid var(--border);">
+    <span id="version-label" style="font-size:10px; color:var(--muted);">v—</span>
+    <button id="update-btn" class="no-drag"
+      style="background:none; border:none; font-size:10px; color:var(--muted); cursor:pointer; padding:0; font-family:inherit;">
+      Check for updates
+    </button>
+  </div>
+
 </div>
 
 <script type="module">
@@ -369,6 +378,46 @@
   }
 
   start()
+
+  // ── Version + update footer ───────────────────────────────────────────────
+  const versionLbl = document.getElementById('version-label')
+  const updateBtn  = document.getElementById('update-btn')
+
+  window.lobi?.getVersion().then(v => { versionLbl.textContent = `v${v}` })
+
+  updateBtn.addEventListener('click', () => {
+    if (updateBtn.dataset.ready === 'true') {
+      window.lobi?.installUpdate()
+      return
+    }
+    updateBtn.textContent = 'Checking…'
+    updateBtn.disabled    = true
+    window.lobi?.checkForUpdate()
+  })
+
+  window.lobi?.onUpdateState(({ state, version }) => {
+    updateBtn.disabled        = false
+    updateBtn.dataset.ready   = 'false'
+    updateBtn.style.color     = 'var(--muted)'
+
+    if (state === 'checking') {
+      updateBtn.textContent = 'Checking…'
+      updateBtn.disabled    = true
+    } else if (state === 'downloading') {
+      updateBtn.textContent = `Downloading v${version}…`
+      updateBtn.disabled    = true
+    } else if (state === 'ready') {
+      updateBtn.textContent       = `Restart to install v${version} ✓`
+      updateBtn.style.color       = 'var(--green)'
+      updateBtn.dataset.ready     = 'true'
+    } else if (state === 'up-to-date') {
+      updateBtn.textContent = 'Up to date ✓'
+      setTimeout(() => { updateBtn.textContent = 'Check for updates' }, 4_000)
+    } else if (state === 'error') {
+      updateBtn.textContent = 'Check failed — try again'
+      setTimeout(() => { updateBtn.textContent = 'Check for updates' }, 4_000)
+    }
+  })
 </script>
 
 </body>

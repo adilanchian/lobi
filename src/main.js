@@ -99,6 +99,35 @@ function openOnboarding() {
 
 let tray = null
 
+// Update state drives the "Check for Updates" menu item label + behaviour
+const UpdateState = {
+  IDLE:        'idle',
+  CHECKING:    'checking',
+  DOWNLOADING: 'downloading',
+  READY:       'ready',
+  UP_TO_DATE:  'up-to-date',
+  ERROR:       'error',
+}
+let updateState   = UpdateState.IDLE
+let updateVersion = null   // set once we know what version is available
+let focusStatus   = 'Starting up...'
+
+function buildTrayMenu() {
+  const menu = Menu.buildFromTemplate([
+    { label: `Lobi  ·  ${focusStatus}`, enabled: false },
+    { type: 'separator' },
+    { label: 'Open Dashboard', click: openDashboard },
+    { type: 'separator' },
+    { label: 'Quit Lobi', click: () => app.exit(0) },
+  ])
+  tray.setContextMenu(menu)
+  tray.setToolTip(`Lobi — ${focusStatus}`)
+}
+
+function rebuildTrayMenu() {
+  if (tray) buildTrayMenu()
+}
+
 function setupTray() {
   // Start with an empty icon — the dashboard will push a live score image once tracking starts
   tray = new Tray(nativeImage.createEmpty())
@@ -106,20 +135,13 @@ function setupTray() {
   // macOS: brain emoji anchors the tray item while the score icon loads
   if (process.platform === 'darwin') tray.setTitle(' 🧠')
 
-  setTrayStatus('Starting up...')
+  buildTrayMenu()
   tray.on('click', openDashboard)
 }
 
 function setTrayStatus(statusText) {
-  const menu = Menu.buildFromTemplate([
-    { label: `Lobi  ·  ${statusText}`, enabled: false },
-    { type: 'separator' },
-    { label: 'Open Dashboard', click: openDashboard },
-    { type: 'separator' },
-    { label: 'Quit Lobi', click: () => app.exit(0) },
-  ])
-  tray.setContextMenu(menu)
-  tray.setToolTip(`Lobi — ${statusText}`)
+  focusStatus = statusText
+  rebuildTrayMenu()
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
@@ -177,6 +199,18 @@ ipcMain.handle('save-session', (_e, data) => {
 
 ipcMain.handle('get-sessions', () => readSessions())
 
+ipcMain.handle('get-version', () => app.getVersion())
+
+ipcMain.handle('check-for-update', () => {
+  if (app.isPackaged) autoUpdater.checkForUpdates()
+  else {
+    // In dev, simulate the flow so you can see it work
+    mainWindow?.webContents.send('update-state', { state: 'up-to-date' })
+  }
+})
+
+ipcMain.on('install-update', () => autoUpdater.quitAndInstall())
+
 ipcMain.on('reset-onboarding', () => {
   writeSettings({ onboardingDone: false })
   mainWindow?.destroy()
@@ -210,17 +244,52 @@ app.whenReady().then(() => {
   settings.onboardingDone ? openDashboard() : openOnboarding()
 
   // ── Auto-update ─────────────────────────────────────────────────────────────
-  // Silently checks GitHub Releases on startup. Downloads in the background and
-  // notifies the user when ready to install.
-  autoUpdater.checkForUpdatesAndNotify()
+  // Silently checks on startup; user can also trigger manually from the tray menu.
 
-  autoUpdater.on('update-downloaded', () => {
-    const choice = new Notification({
-      title: 'Lobi update ready',
-      body: 'A new version has been downloaded. Restart to install.',
-    })
-    choice.show()
+  function pushUpdateState(payload) {
+    mainWindow?.webContents.send('update-state', payload)
+  }
+
+  autoUpdater.on('checking-for-update', () => {
+    updateState = UpdateState.CHECKING
+    rebuildTrayMenu()
+    pushUpdateState({ state: 'checking' })
   })
+
+  autoUpdater.on('update-available', (info) => {
+    updateVersion = info.version
+    updateState   = UpdateState.DOWNLOADING
+    rebuildTrayMenu()
+    pushUpdateState({ state: 'downloading', version: info.version })
+  })
+
+  autoUpdater.on('update-not-available', () => {
+    updateState = UpdateState.UP_TO_DATE
+    rebuildTrayMenu()
+    pushUpdateState({ state: 'up-to-date' })
+    setTimeout(() => { updateState = UpdateState.IDLE; rebuildTrayMenu() }, 10_000)
+  })
+
+  autoUpdater.on('update-downloaded', (info) => {
+    updateVersion = info.version
+    updateState   = UpdateState.READY
+    rebuildTrayMenu()
+    pushUpdateState({ state: 'ready', version: info.version })
+    sendNotification(
+      'Lobi update ready 🎉',
+      `v${info.version} is downloaded. Open Lobi to restart and install.`
+    )
+  })
+
+  autoUpdater.on('error', () => {
+    updateState = UpdateState.ERROR
+    rebuildTrayMenu()
+    pushUpdateState({ state: 'error' })
+    setTimeout(() => { updateState = UpdateState.IDLE; rebuildTrayMenu() }, 10_000)
+  })
+
+  // Only check in packaged builds — autoUpdater hangs in dev mode (electron .)
+  if (app.isPackaged) autoUpdater.checkForUpdates()
 })
 
 // Keep the app alive in the tray even when all windows are closed

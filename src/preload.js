@@ -32,4 +32,10 @@ contextBridge.exposeInMainWorld('lobi', {
 
   // Dev helper — resets onboarding state and reopens the setup flow
   resetOnboarding: () => ipcRenderer.send('reset-onboarding'),
+
+  // Version + updates
+  getVersion:    ()         => ipcRenderer.invoke('get-version'),
+  checkForUpdate: ()        => ipcRenderer.invoke('check-for-update'),
+  installUpdate:  ()        => ipcRenderer.send('install-update'),
+  onUpdateState: (callback) => ipcRenderer.on('update-state', (_e, state) => callback(state)),
 })

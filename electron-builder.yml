@@ -33,6 +33,9 @@ mac:
 
   target:
     - target: dmg
+      arch: universal   # single installer for Intel + Apple Silicon
+    - target: zip
+      arch: universal   # required by electron-updater for macOS delta updates
 
 dmg:
   title: "Lobi"
@@ -44,11 +47,22 @@ dmg:
       type: link
       path: /Applications
 
-# ── Windows (for later) ──────────────────────────────────────────────────────
+# ── Auto-update — publishes to GitHub Releases ───────────────────────────────
+# Set GH_TOKEN env var when running `npm run build` to publish.
+# electron-updater checks for updates from this repo's releases automatically.
+publish:
+  provider: github
+  owner: adilanchian
+  repo: lobi
+
+# ── Windows ───────────────────────────────────────────────────────────────────
 win:
   icon: assets/icon.ico
   target:
-    - target: nsis
+    - target: nsis   # handles auto-updates natively, generates latest.yml
+      arch: x64      # covers all Windows 10+ desktops/laptops
+    - target: zip
+      arch: x64
 
 nsis:
   oneClick: false

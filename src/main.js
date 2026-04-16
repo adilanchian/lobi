@@ -2,6 +2,7 @@
 // Handles: app lifecycle, windows, system tray, notifications, IPC routing
 
 const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, session, systemPreferences } = require('electron')
+const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs   = require('fs')
 
@@ -207,6 +208,19 @@ app.whenReady().then(() => {
 
   setupTray()
   settings.onboardingDone ? openDashboard() : openOnboarding()
+
+  // ── Auto-update ─────────────────────────────────────────────────────────────
+  // Silently checks GitHub Releases on startup. Downloads in the background and
+  // notifies the user when ready to install.
+  autoUpdater.checkForUpdatesAndNotify()
+
+  autoUpdater.on('update-downloaded', () => {
+    const choice = new Notification({
+      title: 'Lobi update ready',
+      body: 'A new version has been downloaded. Restart to install.',
+    })
+    choice.show()
+  })
 })
 
 // Keep the app alive in the tray even when all windows are closed

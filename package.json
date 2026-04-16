@@ -1,6 +1,6 @@
 {
   "name": "lobi",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Focus monitor using eye tracking",
   "author": "Wind Down Studio, LLC",
   "main": "src/main.js",
@@ -8,11 +8,17 @@
     "start": "electron .",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
-    "build": "electron-builder --mac --win"
+    "build": "electron-builder --mac --win",
+    "publish:mac": "electron-builder --mac --publish always",
+    "publish:win": "electron-builder --win --publish always",
+    "publish": "electron-builder --mac --win --publish always"
   },
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
     "electron": "^28.0.0",
     "electron-builder": "^24.0.0"
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.3"
   }
 }

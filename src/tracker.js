@@ -74,13 +74,13 @@ export class Tracker {
   #gazeHistory     = []    // { x, y, t } — rolling GAZE_WINDOW_MS
   #eyeWasClosed    = false
 
-  static async start(videoElement, onUpdate) {
+  static async start(videoElement, onUpdate, deviceId = null) {
     const t = new Tracker()
-    await t.#init(videoElement, onUpdate)
+    await t.#init(videoElement, onUpdate, deviceId)
     return t
   }
 
-  async #init(videoElement, onUpdate) {
+  async #init(videoElement, onUpdate, deviceId) {
     const { FaceLandmarker, FilesetResolver } = await import(MEDIAPIPE_ESM)
     const vision = await FilesetResolver.forVisionTasks(WASM_CDN)
 
@@ -90,9 +90,13 @@ export class Tracker {
       numFaces: 1,
     })
 
-    this.#stream = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: 'user', width: 640, height: 480 },
-    })
+    // Explicit deviceId when provided; otherwise let the OS pick its default
+    // camera (facingMode 'user' is a hint for devices that have front/rear cams).
+    const videoConstraints = { width: 640, height: 480 }
+    if (deviceId) videoConstraints.deviceId = { exact: deviceId }
+    else          videoConstraints.facingMode = 'user'
+
+    this.#stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints })
 
     this.#video             = videoElement
     this.#video.srcObject   = this.#stream

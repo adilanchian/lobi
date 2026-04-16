@@ -26,7 +26,9 @@ html, body {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   user-select: none;
-  overflow: hidden;
+  /* No global overflow: hidden — each top-level page (onboarding-page /
+     dashboard-page) decides its own scroll behaviour. Onboarding uses
+     natural window scroll so content can never be clipped unreachably. */
 }
 
 /* ─── Drag region (macOS hidden title bar) ───────────────────────────────────── */
@@ -35,6 +37,12 @@ html, body {
   -webkit-app-region: drag;
   height: 28px;
   flex-shrink: 0;
+  /* Sticky so the window stays draggable from the top strip even after the
+     user has scrolled down through a long onboarding step. */
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg);
 }
 
 .no-drag { -webkit-app-region: no-drag; }
@@ -167,22 +175,69 @@ button:active { transform: scale(0.97); }
 
 /* ─── Onboarding ─────────────────────────────────────────────────────────────── */
 
+/* Onboarding grows with its content and the window scrolls when needed.
+   `min-height: 100%` (not `height: 100%`) lets the page stretch past the
+   viewport instead of clipping. Natural window scroll is the clearest
+   "more below" signal possible. */
 .onboarding-page {
-  width: 100%; height: 100%;
+  width: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   padding: 0 32px 32px;
+  position: relative;
 }
 
-.step { display: none; flex-direction: column; flex: 1; }
+.step { display: none; flex-direction: column; }
 .step.active { display: flex; }
 
+/* Content is top-aligned and flows naturally. No fixed height, no internal
+   scroll — the window itself scrolls if the step is taller than the viewport,
+   and the primary-action button sits at the *end* of the content so reaching
+   it is always a simple "scroll down" gesture. */
 .step-content {
-  flex: 1;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   gap: 16px;
+  padding: 8px 0;
+}
+
+/* Gradient fade pinned to the bottom of the viewport. Only lit up when
+   there's more content below the fold — a clear, passive scroll hint that
+   doesn't interfere with layout. Toggled by JS via the `has-overflow` class
+   on .onboarding-page. */
+.onboarding-page::after {
+  content: '';
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  height: 56px;
+  background: linear-gradient(to top, var(--bg) 15%, transparent);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 5;
+}
+.onboarding-page.has-overflow::after { opacity: 1; }
+
+/* Small chevron above the gradient — an unambiguous "scroll down" indicator. */
+.scroll-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 12px;
+  transform: translateX(-50%);
+  font-size: 16px;
+  color: var(--muted);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  z-index: 6;
+  animation: scroll-hint-bob 1.6s ease-in-out infinite;
+}
+.onboarding-page.has-overflow .scroll-hint { opacity: 1; }
+
+@keyframes scroll-hint-bob {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50%      { transform: translateX(-50%) translateY(4px); }
 }
 
 .step-icon { font-size: 52px; line-height: 1; margin-bottom: 4px; }

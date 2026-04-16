@@ -82,6 +82,10 @@
 
       <video id="camera-preview" class="camera-preview" autoplay muted playsinline></video>
 
+      <select id="camera-select" class="no-drag" title="Webcam source"
+              style="display:none; margin-top:8px; padding:6px 10px; border:1px solid var(--border); border-radius:8px; background:var(--surface); color:var(--text); font-family:inherit; font-size:12px; width:100%; cursor:pointer;">
+      </select>
+
       <div class="camera-status" id="camera-status">
         <span class="status-dot" id="cam-dot"></span>
         <span id="cam-label">Waiting for camera permission…</span>
@@ -116,6 +120,10 @@
     <button class="btn-primary no-drag" onclick="allowNotifications()">Allow Notifications →</button>
     <button class="btn-skip no-drag" onclick="skipNotifications()">Skip for now</button>
   </div>
+
+  <!-- Passive "more below" indicator, paired with the bottom gradient in CSS.
+       Visibility is driven by the .has-overflow class on .onboarding-page. -->
+  <div class="scroll-hint" aria-hidden="true">⌄</div>
 
   <!-- ── Step 4: Ready ────────────────────────────────────────────────────── -->
   <div class="step" id="step-4">
@@ -158,6 +166,10 @@
   let cameraStream = null
   let notificationsEnabled = false
 
+  // Persisted across the onboarding→dashboard handoff via the same localStorage
+  // key the dashboard reads on boot.
+  let selectedDeviceId = localStorage.getItem('lobi.cameraDeviceId') || null
+
   function goTo(n) {
     document.getElementById(`step-${currentStep}`).classList.remove('active')
     document.getElementById(`step-${n}`).classList.add('active')
@@ -168,8 +180,29 @@
       dot.classList.toggle('active', i < n)
     })
 
+    // Jump back to the top when changing steps so the user doesn't land
+    // mid-content, and recompute the scroll hint for the new step's height.
+    window.scrollTo(0, 0)
+    requestAnimationFrame(updateScrollHint)
+
     if (n === 2) startCamera()
   }
+
+  // ── Scroll-hint toggler ────────────────────────────────────────────────
+  // Lights up the bottom gradient + chevron whenever there's content below
+  // the current scroll position. Fades out as the user approaches the end,
+  // so they get a clear signal there's nothing more to scroll to.
+  const onboardingPage = document.querySelector('.onboarding-page')
+  function updateScrollHint() {
+    const doc         = document.documentElement
+    const distanceToEnd = doc.scrollHeight - (window.scrollY + window.innerHeight)
+    onboardingPage.classList.toggle('has-overflow', distanceToEnd > 8)
+  }
+  window.addEventListener('scroll', updateScrollHint, { passive: true })
+  window.addEventListener('resize', updateScrollHint)
+  // Also react when the video element loads (changes layout height).
+  document.getElementById('camera-preview').addEventListener('loadedmetadata', updateScrollHint)
+  requestAnimationFrame(updateScrollHint)
 
   async function allowNotifications() {
     notificationsEnabled = true
@@ -201,9 +234,11 @@
 
       // Step 2 — Now that macOS has granted permission, open the camera stream
       label.textContent = 'Starting camera...'
-      cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } })
-      video.srcObject = cameraStream
-      await video.play()
+      await openStream(selectedDeviceId)
+
+      // Labels are only populated after a successful getUserMedia() call —
+      // that's why we enumerate here, not before.
+      await populateCameraList()
 
       dot.classList.add('green')
       label.textContent = 'Camera is working!'
@@ -216,6 +251,65 @@
         : `Camera error: ${err.message}`
     }
   }
+
+  // Open (or re-open) the preview stream on a specific device. Always tears
+  // down the previous stream first so we don't leak tracks when switching.
+  async function openStream(deviceId) {
+    const video = document.getElementById('camera-preview')
+    cameraStream?.getTracks().forEach(t => t.stop())
+
+    const videoConstraints = {}
+    if (deviceId) videoConstraints.deviceId = { exact: deviceId }
+    else          videoConstraints.facingMode = 'user'
+
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints })
+    video.srcObject = cameraStream
+    await video.play()
+  }
+
+  async function populateCameraList() {
+    const select = document.getElementById('camera-select')
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    const cams = devices.filter(d => d.kind === 'videoinput')
+
+    // Only surface the picker when there's an actual choice to make.
+    if (cams.length < 2) {
+      select.style.display = 'none'
+      // Still lock in the default so the dashboard doesn't re-prompt the OS.
+      if (cams[0]) {
+        selectedDeviceId = cams[0].deviceId
+        localStorage.setItem('lobi.cameraDeviceId', selectedDeviceId)
+      }
+      return
+    }
+
+    select.innerHTML = ''
+    cams.forEach((cam, i) => {
+      const opt = document.createElement('option')
+      opt.value       = cam.deviceId
+      opt.textContent = cam.label || `Camera ${i + 1}`
+      select.appendChild(opt)
+    })
+
+    const activeTrack = cameraStream?.getVideoTracks()?.[0]
+    const currentId   = activeTrack?.getSettings?.().deviceId || cams[0].deviceId
+    select.value      = currentId
+    selectedDeviceId  = currentId
+    localStorage.setItem('lobi.cameraDeviceId', selectedDeviceId)
+    select.style.display = 'block'
+  }
+
+  document.getElementById('camera-select').addEventListener('change', async (e) => {
+    selectedDeviceId = e.target.value
+    localStorage.setItem('lobi.cameraDeviceId', selectedDeviceId)
+    const label = document.getElementById('cam-label')
+    try {
+      await openStream(selectedDeviceId)
+      label.textContent = 'Camera is working!'
+    } catch (err) {
+      label.textContent = `Camera error: ${err.message}`
+    }
+  })
 
   function finish() {
     // Stop the preview stream — the dashboard will start its own tracking stream

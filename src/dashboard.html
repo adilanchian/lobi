@@ -56,6 +56,22 @@
       flex-shrink: 0;
     }
 
+    /* Camera column: preview on top, source picker below */
+    .camera-col { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; }
+
+    .camera-select {
+      width: 88px;
+      font-size: 10px;
+      padding: 2px 4px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      font-family: inherit;
+      cursor: pointer;
+    }
+    .camera-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
     /* ── Calibrating pulse ───────────────────────────────────────────────── */
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
     .calibrating { animation: pulse 1.8s ease-in-out infinite; }
@@ -103,8 +119,13 @@
   <!-- ── Signal card: camera + sub-score bars ───────────────────────────── -->
   <div class="card signal-card">
 
-    <!-- Camera preview -->
-    <video id="tracking-video" class="camera-thumb" autoplay muted playsinline></video>
+    <!-- Camera preview + source picker -->
+    <div class="camera-col">
+      <video id="tracking-video" class="camera-thumb" autoplay muted playsinline></video>
+      <select id="camera-select" class="camera-select no-drag" title="Webcam source" disabled>
+        <option>Loading…</option>
+      </select>
+    </div>
 
     <!-- Sub-score bars -->
     <div class="sub-scores">
@@ -187,7 +208,12 @@
 
   let engine  = new InsightEngine()
   let tracker = null
-  const video = document.getElementById('tracking-video')
+  const video        = document.getElementById('tracking-video')
+  const cameraSelect = document.getElementById('camera-select')
+
+  // Currently selected webcam deviceId (null = OS default). Persisted across
+  // restarts so the user doesn't have to re-pick their camera each session.
+  let selectedDeviceId = localStorage.getItem('lobi.cameraDeviceId') || null
 
   // ── Tray icon — score number drawn on a canvas, sent to main as PNG ───────
   let lastTrayScore = -1
@@ -271,6 +297,61 @@
   //   }
   // }
 
+  // ── Webcam source picker ─────────────────────────────────────────────────
+  // Enumerate videoinput devices and populate the dropdown. Labels are only
+  // exposed after the first getUserMedia() call succeeds, so call this once
+  // the tracker has started (not before) for proper names instead of "Camera 1".
+  async function refreshCameraList() {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const cams    = devices.filter(d => d.kind === 'videoinput')
+
+      cameraSelect.innerHTML = ''
+      if (!cams.length) {
+        cameraSelect.innerHTML = '<option>No cameras found</option>'
+        cameraSelect.disabled  = true
+        return
+      }
+
+      cams.forEach((cam, i) => {
+        const opt = document.createElement('option')
+        opt.value       = cam.deviceId
+        opt.textContent = cam.label || `Camera ${i + 1}`
+        cameraSelect.appendChild(opt)
+      })
+
+      // Restore previous selection if it still exists; otherwise default to
+      // the first device (which is the OS default camera).
+      const stillPresent = selectedDeviceId && cams.some(c => c.deviceId === selectedDeviceId)
+      cameraSelect.value  = stillPresent ? selectedDeviceId : cams[0].deviceId
+      selectedDeviceId    = cameraSelect.value
+      cameraSelect.disabled = false
+    } catch (err) {
+      console.warn('[lobi] could not enumerate cameras:', err)
+    }
+  }
+
+  cameraSelect.addEventListener('change', async () => {
+    selectedDeviceId = cameraSelect.value
+    localStorage.setItem('lobi.cameraDeviceId', selectedDeviceId)
+
+    // Swap the camera without ending the session: stop the current tracker,
+    // then start a fresh one on the chosen device. InsightEngine state is kept.
+    if (!sessionRunning) return
+    tracker?.stop()
+    tracker = null
+    try {
+      tracker = await Tracker.start(video, onTrackingUpdate, selectedDeviceId)
+    } catch (err) {
+      console.error('[lobi] failed to switch camera:', err)
+      errorBanner.style.display = 'block'
+      errorBanner.textContent   = `⚠️ Couldn't switch camera: ${err.message}`
+    }
+  })
+
+  // If the user plugs/unplugs a webcam, keep the list fresh.
+  navigator.mediaDevices?.addEventListener?.('devicechange', refreshCameraList)
+
   // ── Session state machine ────────────────────────────────────────────────
   let sessionRunning = true
   const sessionBtn   = document.getElementById('btn-session')
@@ -324,7 +405,8 @@
     scoreStat.textContent  = 'Loading...'
 
     try {
-      tracker = await Tracker.start(video, onTrackingUpdate)
+      tracker = await Tracker.start(video, onTrackingUpdate, selectedDeviceId)
+      refreshCameraList()
     } catch (err) {
       console.error('[lobi] tracker error:', err)
       errorBanner.style.display = 'block'
@@ -360,7 +442,8 @@
   async function start() {
     try {
       scoreStat.textContent = 'Loading...'
-      tracker = await Tracker.start(video, onTrackingUpdate)
+      tracker = await Tracker.start(video, onTrackingUpdate, selectedDeviceId)
+      refreshCameraList()
       // WATER TRACKING — re-enable when drink-detector is ready
       // DrinkDetector.start(video, onDrinkUpdate).catch(err =>
       //   console.warn('[lobi] drink detector unavailable:', err))

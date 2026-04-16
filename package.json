@@ -1,6 +1,6 @@
 {
   "name": "lobi",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Focus monitor using eye tracking",
   "author": "Wind Down Studio, LLC",
   "main": "src/main.js",

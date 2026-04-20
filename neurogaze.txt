@@ -1,0 +1,206 @@
+1. Recovery / decay dynamics (grounded in attention research)
+
+There isn’t a single “correct” recovery curve in the literature, but there is consistent evidence that:
+
+Attention degrades gradually under fatigue/disengagement
+Recovery is slower than instantaneous re-engagement, especially after lapses
+
+From vigilance and sustained attention literature:
+
+Performance drops follow a gradual drift (seconds → minutes)
+Recovery after distraction is asymmetric (slower than drop if fatigue-related, faster if brief distraction)
+Practical model (fits both science + UX)
+
+Use asymmetric inertia:
+
+Drop rate (disengagement): moderate
+Recovery rate (re-engagement): slower
+Implementation concept:
+Score
+t
+	​
+
+={
+Score
+t−1
+	​
+
+−δ
+down
+	​
+
+⋅f(bad_signal)
+Score
+t−1
+	​
+
++δ
+up
+	​
+
+⋅f(good_signal)
+	​
+
+
+Suggested ratios:
+
+δ
+down
+	​
+
+≈1.0
+δ
+up
+	​
+
+≈0.5−0.7
+
+Interpretation:
+
+You lose focus faster than you regain it → feels real
+But not instant drops → avoids “fake” feel
+2. Task switching / phone threshold (literature-informed)
+
+You asked specifically for this—here’s the useful synthesis:
+
+What research broadly shows:
+Micro-distractions (<5–10s)
+→ often don’t meaningfully disrupt task state
+Short task switches (~10–20s)
+→ begin to incur context switching cost
+Longer switches (20–60s)
+→ measurable cognitive disengagement
+→ reorientation cost on return
+Classic findings (e.g., task-switching + interruption research):
+Even brief interruptions increase error rates
+~15–20 seconds is where disruption becomes reliably measurable
+Your proposed 15s threshold
+
+This is actually well aligned.
+
+Refined recommendation:
+
+Use tiered penalties, not a hard cutoff:
+
+Phase 1: 0–5s (ignore)
+No penalty
+Natural behavior
+Phase 2: 5–15s (soft suspicion)
+Very small penalty ramp
+Mostly suppressed unless eyes also degrade
+Phase 3: 15–30s (confirmed disengagement)
+Start real penalty
+Phase 4: 30s+ (full disengagement)
+Strong penalty scaling
+Formula concept
+
+Let T
+off
+	​
+
+ = time looking down (phone proxy)
+
+Penalty
+phone
+	​
+
+=
+⎩
+⎨
+⎧
+	​
+
+0
+α⋅(T
+off
+	​
+
+−5)
+β⋅(T
+off
+	​
+
+−15)
+	​
+
+T
+off
+	​
+
+<5
+5≤T
+off
+	​
+
+<15
+T
+off
+	​
+
+≥15
+	​
+
+
+Where:
+
+β>α
+Nonlinear growth feels better (e.g., exponential ramp)
+3. Integrating this into your score (cleanly)
+
+Update your head component:
+
+H
+′
+=1−((PitchPenalty+YawPenalty)⋅EyeGate)
+
+Now redefine:
+
+PitchPenalty:
+PitchPenalty=f(P)⋅g(T
+off
+	​
+
+)
+
+Where:
+
+f(P) = how far down the head is
+g(T
+off
+	​
+
+) = your time-based ramp (above)
+4. Session-based behavior (important implication)
+
+Since you're session-based:
+
+You don’t need long-term calibration
+But you do need early-session stabilization
+First 30–60 seconds:
+Reduce penalties by ~50%
+Let system “settle”
+
+Otherwise:
+
+initial noise → bad UX
+5. Final tuned scoring behavior (what it should feel like)
+
+If implemented correctly:
+
+Case 1: Multi-monitor work
+Head turns left/right → no drop
+Eyes stable → score stays high
+Case 2: Brief distraction
+Quick glance down → no real change
+Case 3: Phone (20s)
+Slow decline → noticeable but not harsh
+Case 4: Fatigue (high PERCLOS)
+Gradual continuous decline
+Case 5: Re-engagement
+Score rises, but not instantly back to 100
+6. Final parameter suggestions (starting values)
+Score update rate: ~5–10 Hz (not every frame)
+Smoothing factor: 0.8–0.9
+Downward penalty onset: ~10–15s
+Full disengagement: ~30s+
+Recovery half-life: ~5–10 seconds

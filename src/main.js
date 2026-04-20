@@ -34,20 +34,22 @@ function writeSessions(data) {
 
 // ─── Window Factory ───────────────────────────────────────────────────────────
 
-function createWindow(htmlFile, width, height, extraPrefs = {}) {
+/** `opts` are BrowserWindow options (e.g. resizable, minWidth). Use `webPreferences` inside opts only for renderer overrides. */
+function createWindow(htmlFile, width, height, opts = {}) {
+  const { webPreferences: wpOverrides = {}, ...bwOpts } = opts
   const win = new BrowserWindow({
     width,
     height,
-    resizable: false,
     backgroundColor: '#0e0e16',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    ...bwOpts,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,      // needed so the renderer can dynamic-import MediaPipe from CDN
       webSecurity: false,  // allows cross-origin WASM/model fetches from CDN (tighten before prod)
-      ...extraPrefs,
+      ...wpOverrides,
     },
   })
 
@@ -73,7 +75,7 @@ function openHistory() {
     historyWin.focus()
     return
   }
-  historyWin = createWindow('history.html', 420, 520)
+  historyWin = createWindow('history.html', 540, 660, { resizable: true, minWidth: 360, minHeight: 400 })
 }
 
 function openDashboard() {
@@ -83,7 +85,11 @@ function openDashboard() {
     return
   }
 
-  mainWindow = createWindow('dashboard.html', 420, 600)
+  mainWindow = createWindow('dashboard.html', 680, 940, {
+    resizable: true,
+    minWidth: 440,
+    minHeight: 600,
+  })
 
   // Hide to tray on the red-X close button — unless we're actually quitting,
   // in which case let the window close so Electron can tear down renderers
@@ -93,10 +99,18 @@ function openDashboard() {
     e.preventDefault()
     mainWindow.hide()
   })
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 }
 
 function openOnboarding() {
-  onboardingWin = createWindow('onboarding.html', 500, 640)
+  onboardingWin = createWindow('onboarding.html', 640, 820, {
+    resizable: true,
+    minWidth: 440,
+    minHeight: 560,
+  })
 }
 
 // ─── Tray ─────────────────────────────────────────────────────────────────────
@@ -310,8 +324,10 @@ app.whenReady().then(() => {
   if (app.isPackaged) autoUpdater.checkForUpdates()
 })
 
-// Keep the app alive in the tray even when all windows are closed
-app.on('window-all-closed', () => { /* intentionally empty */ })
+// macOS: tray keeps the app alive when the dashboard is hidden (window still exists). Windows/Linux: last window closed → quit.
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') app.quit()
+})
 
 // macOS dock click — re-open the dashboard
 app.on('activate', openDashboard)

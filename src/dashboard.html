@@ -6,44 +6,9 @@
   <title>Lobi</title>
   <link rel="stylesheet" href="style.css">
   <style>
-    /* ── Sub-score bars ──────────────────────────────────────────────────── */
-    .sub-scores { display: flex; flex-direction: column; gap: 9px; flex: 1; }
-
-    .sub-score-row {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-
-    .sub-score-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: baseline;
-      font-size: 11px;
-    }
-
-    .sub-score-label { color: var(--muted); font-weight: 500; }
-    .sub-score-value { font-weight: 700; font-size: 12px; font-family: monospace; }
-
-    .sub-score-track {
-      height: 5px;
-      background: var(--border);
-      border-radius: 3px;
-      overflow: hidden;
-    }
-
-    .sub-score-fill {
-      height: 100%;
-      border-radius: 3px;
-      background: var(--green);
-      transition: width 0.7s ease, background-color 0.7s ease;
-    }
-
-    /* ── Signal card (camera + bars side by side) ────────────────────────── */
     .signal-card {
       display: flex;
-      gap: 14px;
-      align-items: flex-start;
+      align-items: center;
     }
 
     .camera-thumb {
@@ -71,6 +36,138 @@
       cursor: pointer;
     }
     .camera-select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .camera-stats-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+    }
+    .stats-panel {
+      flex: 1;
+      min-width: 0;
+      padding: 10px 10px 8px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
+    }
+    .stats-heading {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .stat-row {
+      display: grid;
+      grid-template-columns: 54px 34px 1fr;
+      gap: 2px 6px;
+      align-items: center;
+      margin-bottom: 5px;
+      font-size: 10px;
+    }
+    .stat-name { color: var(--muted); font-weight: 500; }
+    .stat-val { color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
+    .stat-track {
+      grid-column: 1 / -1;
+      height: 5px;
+      background: var(--border);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 1px;
+    }
+    .stat-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent), #a78bfa);
+      transition: width 0.08s ease-out;
+    }
+    .stat-fill.warn { background: linear-gradient(90deg, var(--yellow), #f59e0b); }
+    .stat-fill.bad { background: linear-gradient(90deg, var(--red), #fb7185); }
+    .stat-fill.ok { background: linear-gradient(90deg, var(--green), #2dd4bf); }
+    .stat-flags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid var(--border);
+    }
+    .stat-flag {
+      font-size: 9px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      color: var(--muted);
+    }
+    .stat-flag.on { border-color: var(--green); color: var(--green); background: rgba(52,211,153,0.08); }
+    .stat-flag.off { opacity: 0.45; }
+
+    /* ── Simple stats (default view) ─────────────────────────────────────── */
+    .simple-stats { display: flex; flex-direction: column; gap: 10px; }
+    .simple-stat-row { display: flex; flex-direction: column; gap: 4px; }
+    .simple-stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .simple-stat-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .simple-stat-icon { font-size: 14px; }
+    .simple-stat-value {
+      font-size: 16px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      transition: color 0.2s;
+    }
+    .simple-stat-value.ok   { color: var(--green); }
+    .simple-stat-value.warn { color: var(--yellow); }
+    .simple-stat-value.bad  { color: var(--red); }
+    .simple-track {
+      height: 7px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .simple-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 4px;
+      transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s ease;
+    }
+    .simple-fill.ok   { background: linear-gradient(90deg, var(--green), #2dd4bf); }
+    .simple-fill.warn { background: linear-gradient(90deg, var(--yellow), #f59e0b); }
+    .simple-fill.bad  { background: linear-gradient(90deg, var(--red), #fb7185); }
+
+    /* ── Advanced toggle ─────────────────────────────────────────────────── */
+    .advanced-toggle {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      background: none;
+      border-left: none; border-right: none; border-bottom: none;
+      font-family: inherit;
+      font-size: 10px;
+      color: var(--muted);
+      cursor: pointer;
+      text-align: center;
+      width: 100%;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      opacity: 0.7;
+      transition: opacity 0.15s, color 0.15s;
+    }
+    .advanced-toggle:hover { opacity: 1; color: var(--text); }
+    #stats-advanced { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
 
     /* ── Calibrating pulse ───────────────────────────────────────────────── */
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -158,60 +255,108 @@
     </button>
   </div>
 
-  <!-- ── Signal card: camera + sub-score bars ───────────────────────────── -->
+  <!-- ── Camera preview + optional live metrics ─────────────────────────────── -->
   <div class="card signal-card">
-
-    <!-- Camera preview + source picker -->
-    <div class="camera-col">
-      <video id="tracking-video" class="camera-thumb" autoplay muted playsinline></video>
-      <select id="camera-select" class="camera-select no-drag" title="Webcam source" disabled>
-        <option>Loading…</option>
-      </select>
-    </div>
-
-    <!-- Sub-score bars -->
-    <div class="sub-scores">
-
-      <div class="sub-score-row">
-        <div class="sub-score-header">
-          <span class="sub-score-label">👁 Eye Comfort</span>
-          <span class="sub-score-value" id="val-eye">--</span>
-        </div>
-        <div class="sub-score-track"><div class="sub-score-fill" id="bar-eye" style="width:100%"></div></div>
+    <div class="camera-stats-row">
+      <div class="camera-col">
+        <video id="tracking-video" class="camera-thumb" autoplay muted playsinline></video>
+        <select id="camera-select" class="camera-select no-drag" title="Webcam source" disabled>
+          <option>Loading…</option>
+        </select>
       </div>
-
-      <div class="sub-score-row">
-        <div class="sub-score-header">
-          <span class="sub-score-label">🧠 Engagement</span>
-          <span class="sub-score-value" id="val-focus">--</span>
+      <div id="stats-panel" class="stats-panel no-drag">
+        <!-- Default: simple high-level scores -->
+        <div id="stats-simple" class="simple-stats">
+          <div class="simple-stat-row">
+            <div class="simple-stat-header">
+              <span class="simple-stat-label">Eye Comfort</span>
+              <span class="simple-stat-value" id="ss-eyes-num">--</span>
+            </div>
+            <div class="simple-track"><div class="simple-fill" id="ss-eyes-fill"></div></div>
+          </div>
+          <div class="simple-stat-row">
+            <div class="simple-stat-header">
+              <span class="simple-stat-label">Engagement</span>
+              <span class="simple-stat-value" id="ss-eng-num">--</span>
+            </div>
+            <div class="simple-track"><div class="simple-fill" id="ss-eng-fill"></div></div>
+          </div>
+          <div class="simple-stat-row">
+            <div class="simple-stat-header">
+              <span class="simple-stat-label">Posture</span>
+              <span class="simple-stat-value" id="ss-post-num">--</span>
+            </div>
+            <div class="simple-track"><div class="simple-fill" id="ss-post-fill"></div></div>
+          </div>
+          <div class="simple-stat-row">
+            <div class="simple-stat-header">
+              <span class="simple-stat-label">Stamina</span>
+              <span class="simple-stat-value" id="ss-stam-num">--</span>
+            </div>
+            <div class="simple-track"><div class="simple-fill" id="ss-stam-fill"></div></div>
+          </div>
         </div>
-        <div class="sub-score-track"><div class="sub-score-fill" id="bar-focus" style="width:100%"></div></div>
-      </div>
 
-      <div class="sub-score-row">
-        <div class="sub-score-header">
-          <span class="sub-score-label">🪑 Posture</span>
-          <span class="sub-score-value" id="val-posture">--</span>
+        <button class="advanced-toggle no-drag" id="advanced-toggle" onclick="toggleAdvanced()">
+          Advanced ↓
+        </button>
+
+        <!-- Advanced view (hidden by default) -->
+        <div id="stats-advanced" style="display:none">
+        <div class="stat-row" title="Eye aspect ratio (open ≈ higher)">
+          <span class="stat-name">EAR</span><span class="stat-val" id="stat-ear-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-ear-fill"></div></div>
         </div>
-        <div class="sub-score-track"><div class="sub-score-fill" id="bar-posture" style="width:100%"></div></div>
-      </div>
-
-      <div class="sub-score-row">
-        <div class="sub-score-header">
-          <span class="sub-score-label">⏱ Stamina</span>
-          <span class="sub-score-value" id="val-stamina">--</span>
+        <div class="stat-row" title="Head pitch (normalized)">
+          <span class="stat-name">Pitch</span><span class="stat-val" id="stat-pitch-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-pitch-fill"></div></div>
         </div>
-        <div class="sub-score-track"><div class="sub-score-fill" id="bar-stamina" style="width:100%"></div></div>
+        <div class="stat-row" title="Head roll (|rad|)">
+          <span class="stat-name">Roll</span><span class="stat-val" id="stat-roll-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-roll-fill"></div></div>
+        </div>
+        <div class="stat-row" title="Head yaw (|norm|) — side monitors">
+          <span class="stat-name">Yaw</span><span class="stat-val" id="stat-yaw-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-yaw-fill"></div></div>
+        </div>
+        <div class="stat-row" title="Mouth opening (yawn proxy)">
+          <span class="stat-name">Lip</span><span class="stat-val" id="stat-lip-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-lip-fill"></div></div>
+        </div>
+        <div class="stat-row" title="Look-up / away tilt">
+          <span class="stat-name">Look↑</span><span class="stat-val" id="stat-lookup-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-lookup-fill"></div></div>
+        </div>
+        <div class="stat-row" title="Seconds chin-down (phone proxy)">
+          <span class="stat-name">T off</span><span class="stat-val" id="stat-toff-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-toff-fill"></div></div>
+        </div>
+        <div class="stat-row" title="Seconds head tilt (roll) beyond upright — tiers like T off">
+          <span class="stat-name">T roll</span><span class="stat-val" id="stat-troll-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-troll-fill"></div></div>
+        </div>
+        <div class="stat-row" title="PERCLOS proxy (eyes closed fraction)">
+          <span class="stat-name">PERC</span><span class="stat-val" id="stat-perc-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-perc-fill"></div></div>
+        </div>
+        <div class="stat-row" title="Internal score before display smoothing">
+          <span class="stat-name">Raw</span><span class="stat-val" id="stat-raw-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-raw-fill"></div></div>
+        </div>
+        <div class="stat-flags">
+          <span class="stat-flag off" id="stat-flag-geom">Geometry</span>
+          <span class="stat-flag off" id="stat-flag-trust">Trusted</span>
+          <span class="stat-flag off" id="stat-flag-chin">Chin dn</span>
+        </div>
+        </div> <!-- /stats-advanced -->
       </div>
-
-
     </div>
   </div>
 
   <!-- ── Insights Feed ──────────────────────────────────────────────────── -->
-  <div style="flex:1; min-height:0; overflow-y:auto;">
+  <div class="insights-section">
     <div class="section-label">Recent Insights</div>
-    <div id="insights-list">
+    <div id="insights-list" class="insights-list">
       <div class="empty-state" id="empty-state">
         Insights will appear here as Lobi monitors your focus.<br>
         <span style="opacity:0.5">Keep working — it's watching 👀</span>
@@ -261,8 +406,7 @@
 </div>
 
 <script type="module">
-  import { Tracker }       from './tracker.js'
-  // import { DrinkDetector } from './drink-detector.js'  // WATER TRACKING — re-enable when ready
+  import { Tracker } from './tracker.js'
   import { InsightEngine } from './insights.js'
 
   const CIRCUMFERENCE = 502.65
@@ -274,12 +418,139 @@
   const emptyState  = document.getElementById('empty-state')
   const errorBanner = document.getElementById('tracker-error')
   const sessionLbl  = document.getElementById('session-time')
-  // const drinkLbl = document.getElementById('drink-count')  // WATER TRACKING
 
   let engine  = new InsightEngine()
   let tracker = null
   const video        = document.getElementById('tracking-video')
   const cameraSelect = document.getElementById('camera-select')
+
+  // ── Advanced panel toggle ─────────────────────────────────────────────────
+  window.toggleAdvanced = function() {
+    const panel  = document.getElementById('stats-advanced')
+    const toggle = document.getElementById('advanced-toggle')
+    const open = panel.style.display === 'none'
+    panel.style.display = open ? '' : 'none'
+    toggle.textContent  = open ? 'Advanced ↑' : 'Advanced ↓'
+  }
+
+  function modeFor(score) {
+    if (score >= 70) return 'ok'
+    if (score >= 40) return 'warn'
+    return 'bad'
+  }
+
+  // EMA-smoothed targets for the 4 high-level bars. The engine tick (~15/s)
+  // otherwise resets the CSS transition mid-flight and the motion looks jumpy.
+  const SMOOTH_ALPHA = 0.12
+  const smoothedScores = { eyeComfort: null, engagement: null, posture: null, stamina: null }
+
+  function ema(key, target) {
+    const prev = smoothedScores[key]
+    const next = prev == null ? target : prev + (target - prev) * SMOOTH_ALPHA
+    smoothedScores[key] = next
+    return next
+  }
+
+  function setHighLevelBar(fillId, numId, score) {
+    const fill = document.getElementById(fillId)
+    const num  = document.getElementById(numId)
+    const rounded = Math.round(score)
+    const m = modeFor(rounded)
+    fill.style.width = `${Math.min(100, Math.max(0, score))}%`
+    fill.className = `simple-fill ${m}`
+    num.textContent = String(rounded)
+    num.className = `simple-stat-value ${m}`
+  }
+
+  function renderSimpleStats() {
+    if (engine.isCalibrating) {
+      ['ss-eyes', 'ss-eng', 'ss-post', 'ss-stam'].forEach((id) => {
+        document.getElementById(`${id}-num`).textContent = '--'
+        document.getElementById(`${id}-num`).className = 'simple-stat-value'
+        document.getElementById(`${id}-fill`).style.width = '0%'
+      })
+      smoothedScores.eyeComfort = smoothedScores.engagement = null
+      smoothedScores.posture = smoothedScores.stamina = null
+      return
+    }
+    const s = engine.getHighLevelScores()
+    setHighLevelBar('ss-eyes-fill', 'ss-eyes-num', ema('eyeComfort', s.eyeComfort))
+    setHighLevelBar('ss-eng-fill',  'ss-eng-num',  ema('engagement', s.engagement))
+    setHighLevelBar('ss-post-fill', 'ss-post-num', ema('posture',    s.posture))
+    setHighLevelBar('ss-stam-fill', 'ss-stam-num', ema('stamina',    s.stamina))
+  }
+
+  const EAR_VIZ_MAX = 0.42
+  const EAR_THRESH_VIZ = 0.2
+
+  function setStatBar(fillId, numId, width01, text, colorMode) {
+    const fill = document.getElementById(fillId)
+    const num = document.getElementById(numId)
+    fill.style.width = `${Math.min(100, Math.max(0, width01 * 100))}%`
+    num.textContent = text
+    fill.classList.remove('warn', 'bad', 'ok')
+    if (colorMode === 'ear') {
+      const earVal = width01 * EAR_VIZ_MAX
+      if (earVal < EAR_THRESH_VIZ) fill.classList.add('bad')
+      else if (earVal < EAR_THRESH_VIZ + 0.04) fill.classList.add('warn')
+      else fill.classList.add('ok')
+    } else if (colorMode === 'perc') {
+      if (width01 > 0.35) fill.classList.add('bad')
+      else if (width01 > 0.18) fill.classList.add('warn')
+    } else if (colorMode === 'raw') {
+      if (width01 < 0.35) fill.classList.add('bad')
+      else if (width01 < 0.5) fill.classList.add('warn')
+      else fill.classList.add('ok')
+    }
+  }
+
+  function setFlag(id, on) {
+    const el = document.getElementById(id)
+    el.classList.toggle('on', on)
+    el.classList.toggle('off', !on)
+  }
+
+  function renderLiveStats(data) {
+    const live = engine.getLiveMetrics()
+    renderSimpleStats()
+
+    const ear = data.ear ?? 0.3
+    setStatBar('stat-ear-fill', 'stat-ear-num', ear / EAR_VIZ_MAX, ear.toFixed(2), 'ear')
+
+    const pitch = data.pitchSmoothed ?? 0
+    const pitch01 = Math.min(1, Math.max(0, (pitch + 0.12) / 0.38))
+    setStatBar('stat-pitch-fill', 'stat-pitch-num', pitch01, pitch.toFixed(2), null)
+
+    const rollR = Math.abs(data.rollRadSmoothed ?? 0)
+    const rollDeg = rollR * (180 / Math.PI)
+    setStatBar('stat-roll-fill', 'stat-roll-num', Math.min(1, rollDeg / 42), `${rollDeg.toFixed(0)}°`, null)
+
+    const yaw = Math.abs(data.yawSmoothed ?? 0)
+    setStatBar('stat-yaw-fill', 'stat-yaw-num', Math.min(1, yaw / 0.55), yaw.toFixed(2), null)
+
+    const lip = data.lipNormSmoothed ?? 0
+    setStatBar('stat-lip-fill', 'stat-lip-num', Math.min(1, lip / 0.55), lip.toFixed(2), null)
+
+    const lu = data.lookUpNormSmoothed ?? 0
+    setStatBar('stat-lookup-fill', 'stat-lookup-num', Math.min(1, lu / 0.22), lu.toFixed(2), null)
+
+    const toff = live.tOff ?? 0
+    setStatBar('stat-toff-fill', 'stat-toff-num', Math.min(1, toff / 40), `${toff.toFixed(1)}s`, null)
+
+    const troll = live.tRoll ?? 0
+    setStatBar('stat-troll-fill', 'stat-troll-num', Math.min(1, troll / 40), `${troll.toFixed(1)}s`, null)
+
+    const pc = live.perclos ?? 0
+    setStatBar('stat-perc-fill', 'stat-perc-num', pc, `${(pc * 100).toFixed(0)}%`, 'perc')
+
+    const raw = live.rawScore ?? 100
+    setStatBar('stat-raw-fill', 'stat-raw-num', raw / 100, String(Math.round(raw)), 'raw')
+
+    const fp = data.facePresent
+    setFlag('stat-flag-geom', !!(fp && data.geometryReliable))
+    setFlag('stat-flag-trust', !!data.concentrationFrameTrusted)
+    setFlag('stat-flag-chin', !!data.chinDown)
+  }
 
   // Currently selected webcam deviceId (null = OS default). Persisted across
   // restarts so the user doesn't have to re-pick their camera each session.
@@ -310,17 +581,6 @@
     window.lobi?.updateTrayIcon(trayCanvas.toDataURL('image/png'))
   }
 
-  // ── Helper: update one sub-score bar ─────────────────────────────────────
-  function updateBar(barId, valId, value) {
-    const fill  = document.getElementById(barId)
-    const label = document.getElementById(valId)
-    if (!fill || !label) return
-    fill.style.width      = value + '%'
-    fill.style.background = value >= 70 ? 'var(--green)' : value >= 40 ? 'var(--yellow)' : 'var(--red)'
-    label.textContent     = value
-    label.style.color     = value >= 70 ? 'var(--green)' : value >= 40 ? 'var(--yellow)' : 'var(--red)'
-  }
-
   // ── Main update — called ~15x/sec ─────────────────────────────────────────
   function onTrackingUpdate(data) {
     engine.update(data)
@@ -338,12 +598,6 @@
     scoreStat.textContent = engine.status
     scoreStat.classList.toggle('calibrating', engine.isCalibrating)
 
-    // Sub-score bars
-    updateBar('bar-eye',     'val-eye',     engine.subScores.eyeComfort)
-    updateBar('bar-focus',   'val-focus',   engine.subScores.focusLock)
-    updateBar('bar-posture', 'val-posture', engine.subScores.posture)
-    updateBar('bar-stamina', 'val-stamina', engine.subScores.stamina)
-
     // Session timer — only update while a session is actively running
     if (sessionRunning) sessionLbl.textContent = `Session: ${engine.sessionMinutes}m`
 
@@ -352,20 +606,9 @@
 
     updateTrayIcon(score)
     window.lobi?.updateTrayStatus(engine.status)
-  }
 
-  // WATER TRACKING — uncomment when drink-detector is ready
-  // function onDrinkUpdate({ drinkCount, justDrank }) {
-  //   drinkLbl.textContent = `💧 ${drinkCount}`
-  //   if (justDrank) {
-  //     drinkLbl.style.color     = 'var(--green)'
-  //     drinkLbl.style.transform = 'scale(1.2)'
-  //     setTimeout(() => {
-  //       drinkLbl.style.color     = ''
-  //       drinkLbl.style.transform = ''
-  //     }, 600)
-  //   }
-  // }
+    renderLiveStats(data)
+  }
 
   // ── Webcam source picker ─────────────────────────────────────────────────
   // Enumerate videoinput devices and populate the dropdown. Labels are only
@@ -555,9 +798,6 @@
       scoreStat.textContent = 'Loading...'
       tracker = await Tracker.start(video, onTrackingUpdate, selectedDeviceId)
       refreshCameraList()
-      // WATER TRACKING — re-enable when drink-detector is ready
-      // DrinkDetector.start(video, onDrinkUpdate).catch(err =>
-      //   console.warn('[lobi] drink detector unavailable:', err))
       scoreStat.textContent = 'Calibrating...'
     } catch (err) {
       console.error('[lobi] tracker error:', err)

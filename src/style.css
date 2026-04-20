@@ -189,7 +189,10 @@ button:active { transform: scale(0.97); }
 }
 
 .step { display: none; flex-direction: column; }
-.step.active { display: flex; }
+/* `margin: auto 0` vertically centers the step when the window has extra
+   space, but collapses to 0 when content exceeds the viewport — so long
+   steps still top-align and scroll naturally instead of getting clipped. */
+.step.active { display: flex; margin: auto 0; }
 
 /* Content is top-aligned and flows naturally. No fixed height, no internal
    scroll — the window itself scrolls if the step is taller than the viewport,
@@ -280,11 +283,24 @@ button:active { transform: scale(0.97); }
 /* ─── Dashboard Layout ───────────────────────────────────────────────────────── */
 
 .dashboard-page {
-  width: 100%; height: 100%;
+  width: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   padding: 0 20px 20px;
   gap: 16px;
+}
+
+/* Fills leftover vertical space when the window is tall; grows with content when many insights (window scrolls — no cramped inner scroll). */
+.insights-section {
+  flex: 1 1 0;
+  min-height: 280px;
+  display: flex;
+  flex-direction: column;
+}
+
+.insights-section > .insights-list {
+  flex: 1 1 auto;
 }
 
 .dashboard-header {

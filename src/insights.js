@@ -207,37 +207,45 @@ export class InsightEngine {
 
   /**
    * Human-readable 0-100 scores for the default dashboard panel.
-   * Reuses the same severity helpers the focus score is built from.
+   * Buckets match the engine's own #dominantLowScoreSignal so the targeted
+   * insight copy ("Rest your eyes", "Bring gaze to screen", etc.) stays
+   * coherent with whichever bar is lowest.
+   *
+   * Yaw is a *grace* signal (poseGrace fades pitch/roll penalties on
+   * ultrawide / multi-monitor setups) — never a direct penalty.
    */
   getHighLevelScores() {
     const perclos = this.#perclosFraction()
     const pg = poseGraceFromYaw(Math.abs(this.#lastYaw))
-    const yawAbs = Math.abs(this.#lastYaw)
+    const gate = eyeGateMul(perclos)
 
-    // Eye Comfort — inverted PERCLOS (eyes closed fraction). 0 closed → 100, 0.40+ → 0.
+    // Eye Comfort — PERCLOS direct (fraction of frames with EAR < EAR_THRESHOLD
+    // over a ~2 s window). 0% closed → 100, 40%+ closed → 0.
     const eyeComfort = Math.round(100 * clamp01(1 - perclos / 0.40))
 
-    // Engagement — forward attention. Penalized by chin-down (pitch + T_off),
-    // looking up/away, and large yaw. Roll stays out of this — it's posture.
-    const pitchP = fPitch(this.#lastPitch) * pg
-    const phoneP = Math.min(1, gPhone(this.#tOff, perclos) / 1.5)
-    const lookP = lookUpSeverity(this.#lastLookUp)
-    const yawP = clamp01((yawAbs - 0.15) / 0.3)
-    const engBad = clamp01(pitchP * 0.6 + phoneP * 0.7 + lookP * 0.5 + yawP * 0.3)
-    const engagement = Math.round(100 * (1 - engBad))
+    // Engagement — the engine's "phone-down" term:
+    //   fPitch(pitch) · poseGrace · gPhone(T_off, perclos) · eyeGate
+    // Short glances return ~0 (T_off ignore window) by design; sustained
+    // chin-down accrues T_off and drags the bar down through the gPhone tiers.
+    const phoneBad = clamp01(fPitch(this.#lastPitch) * pg * gPhone(this.#tOff, perclos) * gate)
+    const engagement = Math.round(100 * (1 - phoneBad))
 
-    // Posture — head level, no sustained tilt, no yawning.
-    const rollP = rollSeverity(this.#lastRoll) * pg
-    const tRollP = Math.min(1, gRoll(this.#tRoll) / 1.5)
+    // Posture — max over head tilt (rollSev · poseGrace · gRoll(T_roll) · gate),
+    // yawn (W_YAWN · yawnSev), and look-up/ceiling gaze (W_LOOK_UP · lookUpSev).
+    // Matches the posture bucket in #dominantLowScoreSignal.
+    const rollW = rollSeverity(this.#lastRoll) * pg * gRoll(this.#tRoll) * gate
     const yawnP = yawnSeverity(this.#lastLip)
-    const postBad = clamp01(rollP * 0.8 + tRollP * 0.5 + yawnP * 0.3)
+    const lookP = lookUpSeverity(this.#lastLookUp)
+    const postBad = clamp01(Math.max(rollW, W_YAWN * yawnP, W_LOOK_UP * lookP))
     const posture = Math.round(100 * (1 - postBad))
 
-    // Stamina — starts at 100, begins declining after 45 min, further degraded
-    // by fatigue signals (eyes-closed fraction, yawning).
+    // Stamina — engine's own ramp: sev ramps 0→0.55 over minutes 45→90, then caps.
+    // Additional fatigue drag from PERCLOS and yawn so drowsy long sessions
+    // show up as worse than merely-long fresh ones.
     const mins = this.sessionMinutes
-    let stamina = mins > 45 ? Math.max(20, 100 - (mins - 45)) : 100
-    stamina = Math.max(0, stamina - perclos * 40 - yawnP * 15)
+    const staminaSev = mins >= 45 ? Math.min(0.55, (mins - 45) / 45) : 0
+    let stamina = 100 * (1 - staminaSev) - perclos * 40 - yawnP * 15
+    stamina = Math.max(0, Math.min(100, stamina))
 
     return { eyeComfort, engagement, posture, stamina: Math.round(stamina) }
   }

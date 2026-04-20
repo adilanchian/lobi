@@ -75,6 +75,48 @@
     /* ── Calibrating pulse ───────────────────────────────────────────────── */
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
     .calibrating { animation: pulse 1.8s ease-in-out infinite; }
+
+    /* ── Session-end modal ───────────────────────────────────────────────── */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.55);
+      display: flex; align-items: flex-end;
+      z-index: 100;
+    }
+    @keyframes slideUp { from { transform: translateY(100%) } to { transform: translateY(0) } }
+    .modal-sheet {
+      width: 100%;
+      background: var(--bg);
+      border-top: 1px solid var(--border);
+      border-radius: 16px 16px 0 0;
+      padding: 20px 20px 28px;
+      display: flex; flex-direction: column; gap: 16px;
+      animation: slideUp 0.22s ease-out;
+    }
+    .modal-heading {
+      font-size: 13px; font-weight: 700; color: var(--text); text-align: center;
+    }
+    .modal-stats {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 6px; text-align: center;
+    }
+    .modal-stat { display: flex; flex-direction: column; gap: 3px; }
+    .modal-stat-val { font-size: 20px; font-weight: 800; line-height: 1; }
+    .modal-stat-lbl { font-size: 10px; color: var(--muted); }
+    .modal-name-input {
+      width: 100%; box-sizing: border-box;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 12px;
+      font-family: inherit; font-size: 13px; color: var(--text);
+      outline: none;
+    }
+    .modal-name-input:focus { border-color: var(--green); }
+    .modal-save-btn {
+      width: 100%; background: var(--green); color: #000;
+      border: none; border-radius: 8px; padding: 10px;
+      font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
+    }
+    .modal-save-btn:hover { opacity: 0.9; }
   </style>
 </head>
 <body>
@@ -188,6 +230,34 @@
     </button>
   </div>
 
+</div>
+
+<!-- ── Session-end modal ──────────────────────────────────────────────────── -->
+<div id="session-modal" class="modal-overlay" style="display:none;">
+  <div class="modal-sheet">
+    <div class="modal-heading">Session Complete</div>
+    <div class="modal-stats">
+      <div class="modal-stat">
+        <span class="modal-stat-val" id="ms-duration">--</span>
+        <span class="modal-stat-lbl">Duration</span>
+      </div>
+      <div class="modal-stat">
+        <span class="modal-stat-val" id="ms-avg">--</span>
+        <span class="modal-stat-lbl">Avg Score</span>
+      </div>
+      <div class="modal-stat">
+        <span class="modal-stat-val" id="ms-peak">--</span>
+        <span class="modal-stat-lbl">Peak</span>
+      </div>
+      <div class="modal-stat">
+        <span class="modal-stat-val" id="ms-insights">--</span>
+        <span class="modal-stat-lbl">Insights</span>
+      </div>
+    </div>
+    <input id="ms-name" class="modal-name-input" type="text"
+           placeholder="Name this session… (optional)" maxlength="60" />
+    <button id="ms-save" class="modal-save-btn">Save Session</button>
+  </div>
 </div>
 
 <script type="module">
@@ -368,30 +438,71 @@
   }
   setSessionBtnEnabled(false)   // start disabled — flips on once first calibration lands
 
-  async function endSession() {
-    if (engine.isCalibrating) return  // button is disabled, but guard defensively
+  function fmtDuration(ms) {
+    const m = Math.round(ms / 60_000)
+    if (m < 60) return `${m}m`
+    const h = Math.floor(m / 60), rem = m % 60
+    return rem > 0 ? `${h}h ${rem}m` : `${h}h`
+  }
 
-    const data = engine.getSessionData()
-    await window.lobi.saveSession(data)
+  function scoreColour(v) {
+    return v >= 70 ? 'var(--green)' : v >= 40 ? 'var(--yellow)' : 'var(--red)'
+  }
 
-    tracker?.stop()
-    tracker = null
-
+  function freezeUI() {
     sessionRunning         = false
     sessionLbl.textContent = 'Session saved ✓'
     sessionBtn.textContent = '▶ New Session'
     sessionBtn.style.color = 'var(--green)'
-    setSessionBtnEnabled(true)   // "New Session" is always clickable
-
-    // Freeze / dim the UI — nothing is monitoring
+    setSessionBtnEnabled(true)
     ring.style.opacity       = '0.3'
     scoreNum.textContent     = '--'
     scoreStat.textContent    = 'No active session'
     scoreStat.classList.remove('calibrating')
     video.srcObject          = null
-
     updateTrayIcon(null)
     window.lobi?.updateTrayStatus('No active session')
+  }
+
+  async function endSession() {
+    if (engine.isCalibrating) return
+
+    const data = engine.getSessionData()
+
+    // Stop tracking immediately so the camera light turns off
+    tracker?.stop()
+    tracker = null
+
+    // Populate and show the naming modal
+    const modal    = document.getElementById('session-modal')
+    const nameInput = document.getElementById('ms-name')
+    const saveBtn  = document.getElementById('ms-save')
+
+    document.getElementById('ms-duration').textContent = fmtDuration(data.durationMs)
+
+    const avgEl  = document.getElementById('ms-avg')
+    avgEl.textContent = data.avgScore
+    avgEl.style.color = scoreColour(data.avgScore)
+
+    const peakEl = document.getElementById('ms-peak')
+    peakEl.textContent = data.peakScore
+    peakEl.style.color = scoreColour(data.peakScore)
+
+    document.getElementById('ms-insights').textContent = data.insightCount
+
+    nameInput.value = ''
+    modal.style.display = 'flex'
+    setTimeout(() => nameInput.focus(), 50)
+
+    async function doSave() {
+      const title = nameInput.value.trim() || null
+      await window.lobi.saveSession({ ...data, title })
+      modal.style.display = 'none'
+      freezeUI()
+    }
+
+    saveBtn.onclick        = doSave
+    nameInput.onkeydown    = (e) => { if (e.key === 'Enter') doSave() }
   }
 
   async function startNewSession() {

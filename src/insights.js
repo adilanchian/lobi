@@ -9,7 +9,13 @@
 //  stamina     (25%) — session duration fatigue model
 //
 // Sub-scores are EMA-smoothed so they feel responsive but not jittery.
-// Notifications fire at most once per 5 minutes, targeted at the worst signal.
+//
+// Notifications fire at most once per 5 minutes globally, and each category
+// has its own longer cooldown so reinforcement/warning messages don't pile up:
+//   - Negative (break / targeted)         → 5 min global only
+//   - Early dip from a recent peak        → 20 min per category
+//   - Hour-in-the-zone milestone          → once per streak
+//   - Peak sustain motivator              → 30 min per category, after 8 min sustain
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
@@ -27,10 +33,28 @@ const EMA = 0.04;
 const NOTIFY_COOLDOWN_MS = 5 * 60 * 1000;
 const FOCUS_MILESTONE_MS = 60 * 60 * 1000;
 
+// Peak focus motivator — reinforces sustained high-focus windows
+const PEAK_THRESHOLD = 82;
+const PEAK_SUSTAIN_MS = 8 * 60 * 1000;
+const PEAK_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000;
+
+// Early dip — fires when the user was recently at peak but is trending down
+// before they fall into the negative-notification zone (<55).
+const DIP_PEAK_FLOOR = 82;
+const DIP_SCORE_UPPER = 78;
+const DIP_SCORE_LOWER = 55;
+const DIP_NOTIFY_COOLDOWN_MS = 20 * 60 * 1000;
+
 // Calibration completes when the tracker has produced stable signals, not on a timer.
 // At ~15fps, 30 consecutive face-present frames ≈ 2s — enough for EMA to move off its
 // initial `100` defaults toward real values and for the gaze history to accumulate.
 const CALIBRATION_FRAMES = 30;
+
+// If no face is detected for this long, the session auto-pauses. When it
+// resumes, every time-based piece of engine state is shifted forward by the
+// pause duration so the session timer, stamina curve, and notification
+// cooldowns all behave as if the away time never happened.
+const FACE_ABSENT_PAUSE_MS = 30 * 1000;
 
 // ─── Sub-score Functions ──────────────────────────────────────────────────────
 // Each returns 0–100 for the current tick based on its signal(s)
@@ -88,21 +112,30 @@ export class InsightEngine {
   // Sub-scores — each 0–100, EMA-smoothed, exposed directly for the UI
   subScores = { eyeComfort: 100, focusLock: 100, posture: 100, stamina: 100 };
 
-  #lastNotifyTs   = 0;
+  #lastNotifyTs = 0;
+  #lastPeakNotifyTs = 0;
+  #lastDipNotifyTs = 0;
+  #peakStreakSince = null; // when score first crossed PEAK_THRESHOLD in current streak
+  #recentPeakScore = 0; // max score in current non-negative streak; gates dip notifications
   #goodFocusSince = Date.now();
-  #sessionStart   = Date.now();
+  #sessionStart = Date.now();
   #lastGazeVariance = 0;
-  #scoreSum   = 0;
+  #scoreSum = 0;
   #scoreCount = 0;
-  #peakScore  = 0;
-  #stableFrames = 0;   // consecutive frames with a detected face
-  #calibrated   = false;
+  #peakScore = 0;
+  #stableFrames = 0; // consecutive frames with a detected face
+  #calibrated = false;
+  #lastFaceTs = Date.now();
+  #pausedSince = null; // timestamp pause began, or null when running
 
   get sessionMinutes() {
     return Math.floor((Date.now() - this.#sessionStart) / 60_000);
   }
   get isCalibrating() {
     return !this.#calibrated;
+  }
+  get isPaused() {
+    return this.#pausedSince !== null;
   }
 
   update({
@@ -116,10 +149,38 @@ export class InsightEngine {
     const now = Date.now();
 
     if (!facePresent) {
-      this.#stableFrames = 0;           // dropout resets the calibration streak
-      this.status = this.#calibrated ? "Away" : "Waiting for face...";
+      this.#stableFrames = 0; // dropout resets the calibration streak
+
+      // Enter paused state once the user has been gone long enough. The pause
+      // is anchored at the moment the threshold was crossed (not "now"), so the
+      // 30s of absence before the pause doesn't count as session time either.
+      if (
+        this.#pausedSince === null &&
+        now - this.#lastFaceTs >= FACE_ABSENT_PAUSE_MS
+      ) {
+        this.#pausedSince = this.#lastFaceTs + FACE_ABSENT_PAUSE_MS;
+      }
+
+      if (this.isPaused) this.status = "Paused";
+      else if (this.#calibrated) this.status = "Away";
+      else this.status = "Waiting for face...";
       return this.score;
     }
+
+    // Face is back — resume from pause by shifting every time-based piece of
+    // engine state forward by the paused duration. This keeps session minutes,
+    // stamina, focus streak, and notification cooldowns consistent across the gap.
+    if (this.#pausedSince !== null) {
+      const pausedDuration = now - this.#pausedSince;
+      this.#sessionStart += pausedDuration;
+      this.#goodFocusSince += pausedDuration;
+      if (this.#peakStreakSince !== null) this.#peakStreakSince += pausedDuration;
+      if (this.#lastNotifyTs) this.#lastNotifyTs += pausedDuration;
+      if (this.#lastPeakNotifyTs) this.#lastPeakNotifyTs += pausedDuration;
+      if (this.#lastDipNotifyTs) this.#lastDipNotifyTs += pausedDuration;
+      this.#pausedSince = null;
+    }
+    this.#lastFaceTs = now;
 
     // Lock in once we've seen enough clean consecutive frames
     if (!this.#calibrated) {
@@ -162,6 +223,20 @@ export class InsightEngine {
 
     if (this.score < 70) this.#goodFocusSince = now;
 
+    // Track peak/dip state for reinforcement notifications.
+    // Drop into negative territory → wipe the streak entirely.
+    if (this.score < DIP_SCORE_LOWER) {
+      this.#recentPeakScore = 0;
+      this.#peakStreakSince = null;
+    } else {
+      this.#recentPeakScore = Math.max(this.#recentPeakScore, this.score);
+      if (this.score >= PEAK_THRESHOLD) {
+        if (this.#peakStreakSince === null) this.#peakStreakSince = now;
+      } else {
+        this.#peakStreakSince = null;
+      }
+    }
+
     if (!this.isCalibrating) {
       this.#scoreSum += this.score;
       this.#scoreCount++;
@@ -175,11 +250,14 @@ export class InsightEngine {
   getSessionData() {
     const now = Date.now();
     return {
-      startTime:    this.#sessionStart,
-      endTime:      now,
-      durationMs:   now - this.#sessionStart,
-      avgScore:     this.#scoreCount > 0 ? Math.round(this.#scoreSum / this.#scoreCount) : 0,
-      peakScore:    this.#peakScore,
+      startTime: this.#sessionStart,
+      endTime: now,
+      durationMs: now - this.#sessionStart,
+      avgScore:
+        this.#scoreCount > 0
+          ? Math.round(this.#scoreSum / this.#scoreCount)
+          : 0,
+      peakScore: this.#peakScore,
       insightCount: this.recentInsights.length,
     };
   }
@@ -256,13 +334,29 @@ export class InsightEngine {
           body: pick([
             "A short break now compounds — 5 minutes off the screen extends your next focus window significantly.",
             "The best time to take a break is before you feel like you need one. Step away now and come back stronger.",
-            "Top performers schedule breaks — they don't wait to crash. A 5-minute walk now beats 30 minutes of diminished focus.",
             "Your brain runs in natural focus cycles. A short reset now keeps the next one just as sharp.",
             "Hydrate, stand up, and give your eyes a rest. These three things together are the fastest recovery combo.",
           ]),
         },
       };
       insight = targeted[worstKey];
+    } else if (
+      this.score >= DIP_SCORE_LOWER &&
+      this.score < DIP_SCORE_UPPER &&
+      this.#recentPeakScore >= DIP_PEAK_FLOOR &&
+      now - this.#lastDipNotifyTs >= DIP_NOTIFY_COOLDOWN_MS
+    ) {
+      insight = {
+        title: "Focus is slipping 🌊",
+        body: pick([
+          "Your focus is starting to dip. Look at something ~20 feet away for 20 seconds.",
+          "Mental fatigue is rising. Close your eyes and do 10 slow breaths (inhale 4, exhale 6).",
+          "You're starting to drift. Stand up for 30 seconds — a quick reset keeps the streak alive.",
+          "Focus is trending down. Sip some water and roll your shoulders back before the dip deepens.",
+          "Early fatigue signals. Look out a window for 20 seconds and let your eyes release.",
+        ]),
+      };
+      this.#lastDipNotifyTs = now;
     } else if (focusedFor > FOCUS_MILESTONE_MS && this.score >= 80) {
       insight = {
         title: "An hour in the zone 🔥",
@@ -274,6 +368,22 @@ export class InsightEngine {
           "One hour down. A real break now — not just scrolling — keeps your performance high for the rest of the day.",
         ]),
       };
+    } else if (
+      this.#peakStreakSince !== null &&
+      now - this.#peakStreakSince >= PEAK_SUSTAIN_MS &&
+      now - this.#lastPeakNotifyTs >= PEAK_NOTIFY_COOLDOWN_MS
+    ) {
+      insight = {
+        title: "Locked in 🔥",
+        body: pick([
+          "You're in a peak focus window right now. Silence notifications and start a 25-minute deep work block.",
+          "Your focus is locked in. Protect this window — silence notifications and batch your hardest task now.",
+          "Deep focus engaged. This is the moment to tackle the thing you've been putting off.",
+          "You're running hot. Ride the wave — commit to 25 uninterrupted minutes on your highest-value task.",
+          "Peak focus detected. Block the next 25 minutes, close every other tab, and go.",
+        ]),
+      };
+      this.#lastPeakNotifyTs = now;
     }
 
     if (!insight) return;

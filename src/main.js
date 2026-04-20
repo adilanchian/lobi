@@ -65,6 +65,7 @@ function createWindow(htmlFile, width, height, extraPrefs = {}) {
 let mainWindow     = null
 let onboardingWin  = null
 let historyWin     = null
+let isQuitting     = false  // flips true once we actually want to shut down
 
 function openHistory() {
   if (historyWin && !historyWin.isDestroyed()) {
@@ -84,8 +85,11 @@ function openDashboard() {
 
   mainWindow = createWindow('dashboard.html', 420, 600)
 
-  // Hide to tray on close rather than quitting
+  // Hide to tray on the red-X close button — unless we're actually quitting,
+  // in which case let the window close so Electron can tear down renderers
+  // (camera, MediaPipe, tracker interval) and any staged update can install.
   mainWindow.on('close', (e) => {
+    if (isQuitting) return
     e.preventDefault()
     mainWindow.hide()
   })
@@ -118,7 +122,7 @@ function buildTrayMenu() {
     { type: 'separator' },
     { label: 'Open Dashboard', click: openDashboard },
     { type: 'separator' },
-    { label: 'Quit Lobi', click: () => app.exit(0) },
+    { label: 'Quit Lobi', click: () => { isQuitting = true; app.quit() } },
   ])
   tray.setContextMenu(menu)
   tray.setToolTip(`Lobi — ${focusStatus}`)
@@ -199,6 +203,13 @@ ipcMain.handle('save-session', (_e, data) => {
 
 ipcMain.handle('get-sessions', () => readSessions())
 
+ipcMain.handle('update-session', (_e, startTime, title) => {
+  const sessions = readSessions()
+  const s = sessions.find(s => s.startTime === startTime)
+  if (s) s.title = title || null
+  writeSessions(sessions)
+})
+
 ipcMain.handle('get-version', () => app.getVersion())
 
 ipcMain.handle('check-for-update', () => {
@@ -209,7 +220,10 @@ ipcMain.handle('check-for-update', () => {
   }
 })
 
-ipcMain.on('install-update', () => autoUpdater.quitAndInstall())
+ipcMain.on('install-update', () => {
+  isQuitting = true
+  autoUpdater.quitAndInstall()
+})
 
 ipcMain.on('reset-onboarding', () => {
   writeSettings({ onboardingDone: false })
@@ -245,6 +259,10 @@ app.whenReady().then(() => {
 
   // ── Auto-update ─────────────────────────────────────────────────────────────
   // Silently checks on startup; user can also trigger manually from the tray menu.
+  // When an update is downloaded, electron-updater installs it on the next app
+  // quit (the `before-quit` event path). That only runs via app.quit() — never
+  // via app.exit(), which is why the tray menu uses app.quit().
+  autoUpdater.autoInstallOnAppQuit = true
 
   function pushUpdateState(payload) {
     mainWindow?.webContents.send('update-state', payload)
@@ -297,3 +315,17 @@ app.on('window-all-closed', () => { /* intentionally empty */ })
 
 // macOS dock click — re-open the dashboard
 app.on('activate', openDashboard)
+
+// Any quit path (menu-bar Quit, Cmd-Q, taskbar close, auto-update install)
+// should flip the flag so `mainWindow.on('close')` stops intercepting.
+app.on('before-quit', () => { isQuitting = true })
+
+// Destroy the tray and any remaining windows so Windows releases every
+// renderer/helper process cleanly. Without this, hidden windows + the tray
+// can keep a zombie menu-bar process alive after the main process exits.
+app.on('will-quit', () => {
+  if (tray && !tray.isDestroyed()) { tray.destroy(); tray = null }
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.destroy()
+  }
+})

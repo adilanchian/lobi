@@ -26,9 +26,10 @@ contextBridge.exposeInMainWorld('lobi', {
   updateTrayIcon: (dataURL) => ipcRenderer.send('tray-icon', dataURL),
 
   // Session history
-  saveSession:  (data) => ipcRenderer.invoke('save-session', data),
-  getSessions:  ()     => ipcRenderer.invoke('get-sessions'),
-  openHistory:  ()     => ipcRenderer.send('open-history'),
+  saveSession:    (data)              => ipcRenderer.invoke('save-session', data),
+  getSessions:    ()                  => ipcRenderer.invoke('get-sessions'),
+  updateSession:  (startTime, title)  => ipcRenderer.invoke('update-session', startTime, title),
+  openHistory:    ()                  => ipcRenderer.send('open-history'),
 
   // Dev helper — resets onboarding state and reopens the setup flow
   resetOnboarding: () => ipcRenderer.send('reset-onboarding'),

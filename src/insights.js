@@ -205,6 +205,43 @@ export class InsightEngine {
     }
   }
 
+  /**
+   * Human-readable 0-100 scores for the default dashboard panel.
+   * Reuses the same severity helpers the focus score is built from.
+   */
+  getHighLevelScores() {
+    const perclos = this.#perclosFraction()
+    const pg = poseGraceFromYaw(Math.abs(this.#lastYaw))
+    const yawAbs = Math.abs(this.#lastYaw)
+
+    // Eye Comfort — inverted PERCLOS (eyes closed fraction). 0 closed → 100, 0.40+ → 0.
+    const eyeComfort = Math.round(100 * clamp01(1 - perclos / 0.40))
+
+    // Engagement — forward attention. Penalized by chin-down (pitch + T_off),
+    // looking up/away, and large yaw. Roll stays out of this — it's posture.
+    const pitchP = fPitch(this.#lastPitch) * pg
+    const phoneP = Math.min(1, gPhone(this.#tOff, perclos) / 1.5)
+    const lookP = lookUpSeverity(this.#lastLookUp)
+    const yawP = clamp01((yawAbs - 0.15) / 0.3)
+    const engBad = clamp01(pitchP * 0.6 + phoneP * 0.7 + lookP * 0.5 + yawP * 0.3)
+    const engagement = Math.round(100 * (1 - engBad))
+
+    // Posture — head level, no sustained tilt, no yawning.
+    const rollP = rollSeverity(this.#lastRoll) * pg
+    const tRollP = Math.min(1, gRoll(this.#tRoll) / 1.5)
+    const yawnP = yawnSeverity(this.#lastLip)
+    const postBad = clamp01(rollP * 0.8 + tRollP * 0.5 + yawnP * 0.3)
+    const posture = Math.round(100 * (1 - postBad))
+
+    // Stamina — starts at 100, begins declining after 45 min, further degraded
+    // by fatigue signals (eyes-closed fraction, yawning).
+    const mins = this.sessionMinutes
+    let stamina = mins > 45 ? Math.max(20, 100 - (mins - 45)) : 100
+    stamina = Math.max(0, stamina - perclos * 40 - yawnP * 15)
+
+    return { eyeComfort, engagement, posture, stamina: Math.round(stamina) }
+  }
+
   update({
     facePresent,
     ear = 0.3,

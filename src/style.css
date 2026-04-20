@@ -189,7 +189,10 @@ button:active { transform: scale(0.97); }
 }
 
 .step { display: none; flex-direction: column; }
-.step.active { display: flex; }
+/* `margin: auto 0` vertically centers the step when the window has extra
+   space, but collapses to 0 when content exceeds the viewport — so long
+   steps still top-align and scroll naturally instead of getting clipped. */
+.step.active { display: flex; margin: auto 0; }
 
 /* Content is top-aligned and flows naturally. No fixed height, no internal
    scroll — the window itself scrolls if the step is taller than the viewport,

@@ -8,7 +8,7 @@
   <style>
     .signal-card {
       display: flex;
-      align-items: flex-start;
+      align-items: center;
     }
 
     .camera-thumb {
@@ -39,38 +39,26 @@
 
     .camera-stats-row {
       display: flex;
-      align-items: flex-start;
-      gap: 10px;
+      align-items: center;
+      gap: 12px;
       width: 100%;
-    }
-    .btn-stats-toggle {
-      width: 100%;
-      padding: 5px 6px;
-      font-size: 10px;
-      font-weight: 600;
-      border-radius: 6px;
-      border: 1px solid var(--border);
-      background: var(--surface);
-      color: var(--muted);
-      font-family: inherit;
-      cursor: pointer;
-    }
-    .btn-stats-toggle:hover { color: var(--text); border-color: var(--accent); }
-    .btn-stats-toggle[aria-expanded="true"] {
-      color: var(--accent);
-      border-color: var(--accent);
     }
     .stats-panel {
       flex: 1;
       min-width: 0;
-      padding: 6px 8px;
+      padding: 10px 10px 8px;
       border-radius: 8px;
       border: 1px solid var(--border);
       background: rgba(0,0,0,0.2);
-      max-height: 220px;
-      overflow-y: auto;
     }
-    .stats-panel[hidden] { display: none !important; }
+    .stats-heading {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.7px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
     .stat-row {
       display: grid;
       grid-template-columns: 54px 34px 1fr;
@@ -116,6 +104,70 @@
     }
     .stat-flag.on { border-color: var(--green); color: var(--green); background: rgba(52,211,153,0.08); }
     .stat-flag.off { opacity: 0.45; }
+
+    /* ── Simple stats (default view) ─────────────────────────────────────── */
+    .simple-stats { display: flex; flex-direction: column; gap: 10px; }
+    .simple-stat-row { display: flex; flex-direction: column; gap: 4px; }
+    .simple-stat-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+    }
+    .simple-stat-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .simple-stat-icon { font-size: 14px; }
+    .simple-stat-value {
+      font-size: 16px;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      color: var(--muted);
+      transition: color 0.2s;
+    }
+    .simple-stat-value.ok   { color: var(--green); }
+    .simple-stat-value.warn { color: var(--yellow); }
+    .simple-stat-value.bad  { color: var(--red); }
+    .simple-track {
+      height: 7px;
+      background: var(--border);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .simple-fill {
+      height: 100%;
+      width: 0%;
+      border-radius: 4px;
+      transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1), background 0.3s ease;
+    }
+    .simple-fill.ok   { background: linear-gradient(90deg, var(--green), #2dd4bf); }
+    .simple-fill.warn { background: linear-gradient(90deg, var(--yellow), #f59e0b); }
+    .simple-fill.bad  { background: linear-gradient(90deg, var(--red), #fb7185); }
+
+    /* ── Advanced toggle ─────────────────────────────────────────────────── */
+    .advanced-toggle {
+      margin-top: 10px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      background: none;
+      border-left: none; border-right: none; border-bottom: none;
+      font-family: inherit;
+      font-size: 10px;
+      color: var(--muted);
+      cursor: pointer;
+      text-align: center;
+      width: 100%;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      opacity: 0.7;
+      transition: opacity 0.15s, color 0.15s;
+    }
+    .advanced-toggle:hover { opacity: 1; color: var(--text); }
+    #stats-advanced { margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border); }
 
     /* ── Calibrating pulse ───────────────────────────────────────────────── */
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -208,12 +260,49 @@
     <div class="camera-stats-row">
       <div class="camera-col">
         <video id="tracking-video" class="camera-thumb" autoplay muted playsinline></video>
-        <button type="button" id="btn-show-stats" class="btn-stats-toggle no-drag" aria-expanded="false">Show stats</button>
         <select id="camera-select" class="camera-select no-drag" title="Webcam source" disabled>
           <option>Loading…</option>
         </select>
       </div>
-      <div id="stats-panel" class="stats-panel no-drag" hidden>
+      <div id="stats-panel" class="stats-panel no-drag">
+        <!-- Default: simple high-level scores -->
+        <div id="stats-simple" class="simple-stats">
+          <div class="simple-stat-row">
+            <div class="simple-stat-header">
+              <span class="simple-stat-label">Eye Comfort</span>
+              <span class="simple-stat-value" id="ss-eyes-num">--</span>
+            </div>
+            <div class="simple-track"><div class="simple-fill" id="ss-eyes-fill"></div></div>
+          </div>
+          <div class="simple-stat-row">
+            <div class="simple-stat-header">
+              <span class="simple-stat-label">Engagement</span>
+              <span class="simple-stat-value" id="ss-eng-num">--</span>
+            </div>
+            <div class="simple-track"><div class="simple-fill" id="ss-eng-fill"></div></div>
+          </div>
+          <div class="simple-stat-row">
+            <div class="simple-stat-header">
+              <span class="simple-stat-label">Posture</span>
+              <span class="simple-stat-value" id="ss-post-num">--</span>
+            </div>
+            <div class="simple-track"><div class="simple-fill" id="ss-post-fill"></div></div>
+          </div>
+          <div class="simple-stat-row">
+            <div class="simple-stat-header">
+              <span class="simple-stat-label">Stamina</span>
+              <span class="simple-stat-value" id="ss-stam-num">--</span>
+            </div>
+            <div class="simple-track"><div class="simple-fill" id="ss-stam-fill"></div></div>
+          </div>
+        </div>
+
+        <button class="advanced-toggle no-drag" id="advanced-toggle" onclick="toggleAdvanced()">
+          Advanced ↓
+        </button>
+
+        <!-- Advanced view (hidden by default) -->
+        <div id="stats-advanced" style="display:none">
         <div class="stat-row" title="Eye aspect ratio (open ≈ higher)">
           <span class="stat-name">EAR</span><span class="stat-val" id="stat-ear-num">—</span>
           <div class="stat-track"><div class="stat-fill" id="stat-ear-fill"></div></div>
@@ -259,6 +348,7 @@
           <span class="stat-flag off" id="stat-flag-trust">Trusted</span>
           <span class="stat-flag off" id="stat-flag-chin">Chin dn</span>
         </div>
+        </div> <!-- /stats-advanced -->
       </div>
     </div>
   </div>
@@ -333,23 +423,62 @@
   let tracker = null
   const video        = document.getElementById('tracking-video')
   const cameraSelect = document.getElementById('camera-select')
-  const btnShowStats = document.getElementById('btn-show-stats')
-  const statsPanel   = document.getElementById('stats-panel')
 
-  const LS_SHOW_STATS = 'lobi.showStats'
-  let statsVisible = localStorage.getItem(LS_SHOW_STATS) === '1'
-
-  function syncStatsPanelUi() {
-    statsPanel.hidden = !statsVisible
-    btnShowStats.setAttribute('aria-expanded', statsVisible ? 'true' : 'false')
-    btnShowStats.textContent = statsVisible ? 'Hide stats' : 'Show stats'
+  // ── Advanced panel toggle ─────────────────────────────────────────────────
+  window.toggleAdvanced = function() {
+    const panel  = document.getElementById('stats-advanced')
+    const toggle = document.getElementById('advanced-toggle')
+    const open = panel.style.display === 'none'
+    panel.style.display = open ? '' : 'none'
+    toggle.textContent  = open ? 'Advanced ↑' : 'Advanced ↓'
   }
-  syncStatsPanelUi()
-  btnShowStats.addEventListener('click', () => {
-    statsVisible = !statsVisible
-    localStorage.setItem(LS_SHOW_STATS, statsVisible ? '1' : '0')
-    syncStatsPanelUi()
-  })
+
+  function modeFor(score) {
+    if (score >= 70) return 'ok'
+    if (score >= 40) return 'warn'
+    return 'bad'
+  }
+
+  // EMA-smoothed targets for the 4 high-level bars. The engine tick (~15/s)
+  // otherwise resets the CSS transition mid-flight and the motion looks jumpy.
+  const SMOOTH_ALPHA = 0.12
+  const smoothedScores = { eyeComfort: null, engagement: null, posture: null, stamina: null }
+
+  function ema(key, target) {
+    const prev = smoothedScores[key]
+    const next = prev == null ? target : prev + (target - prev) * SMOOTH_ALPHA
+    smoothedScores[key] = next
+    return next
+  }
+
+  function setHighLevelBar(fillId, numId, score) {
+    const fill = document.getElementById(fillId)
+    const num  = document.getElementById(numId)
+    const rounded = Math.round(score)
+    const m = modeFor(rounded)
+    fill.style.width = `${Math.min(100, Math.max(0, score))}%`
+    fill.className = `simple-fill ${m}`
+    num.textContent = String(rounded)
+    num.className = `simple-stat-value ${m}`
+  }
+
+  function renderSimpleStats() {
+    if (engine.isCalibrating) {
+      ['ss-eyes', 'ss-eng', 'ss-post', 'ss-stam'].forEach((id) => {
+        document.getElementById(`${id}-num`).textContent = '--'
+        document.getElementById(`${id}-num`).className = 'simple-stat-value'
+        document.getElementById(`${id}-fill`).style.width = '0%'
+      })
+      smoothedScores.eyeComfort = smoothedScores.engagement = null
+      smoothedScores.posture = smoothedScores.stamina = null
+      return
+    }
+    const s = engine.getHighLevelScores()
+    setHighLevelBar('ss-eyes-fill', 'ss-eyes-num', ema('eyeComfort', s.eyeComfort))
+    setHighLevelBar('ss-eng-fill',  'ss-eng-num',  ema('engagement', s.engagement))
+    setHighLevelBar('ss-post-fill', 'ss-post-num', ema('posture',    s.posture))
+    setHighLevelBar('ss-stam-fill', 'ss-stam-num', ema('stamina',    s.stamina))
+  }
 
   const EAR_VIZ_MAX = 0.42
   const EAR_THRESH_VIZ = 0.2
@@ -382,8 +511,8 @@
   }
 
   function renderLiveStats(data) {
-    if (!statsVisible) return
     const live = engine.getLiveMetrics()
+    renderSimpleStats()
 
     const ear = data.ear ?? 0.3
     setStatBar('stat-ear-fill', 'stat-ear-num', ear / EAR_VIZ_MAX, ear.toFixed(2), 'ear')

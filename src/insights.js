@@ -1,17 +1,17 @@
 // insights.js — Focus score (0–100) from neurogaze.txt: T_off / T_roll tiers, f(P)·g(T_off),
-// rollSeverity·gRoll(T_roll), EyeGate (PERCLOS proxy), asymmetric drop/recover, warmup.
+// rollSeverity·gRoll(T_roll), EyeGate (PERCLOS proxy); composite bad → score, warmup scale, display EMA.
 
 import {
-  BAD_SIGNAL_THRESHOLD,
-  BLINK_SPIKE_BASE,
-  BLINK_SPIKE_CAP,
-  BLINK_SPIKE_PER_MS,
   CALIBRATION_FRAMES,
   DISPLAY_SCORE_SMOOTH,
   EAR_THRESHOLD,
   EYE_BLEND_MIN,
   EYE_GATE_MIN,
   F_PITCH_SOFT,
+  G_LOOK_ALPHA,
+  G_LOOK_BETA,
+  G_LOOK_GAMMA,
+  G_LOOK_LONG_TAU,
   G_PHONE_ALPHA,
   G_PHONE_BETA,
   G_PHONE_GAMMA,
@@ -20,15 +20,13 @@ import {
   G_ROLL_BETA,
   G_ROLL_GAMMA,
   G_ROLL_LONG_TAU,
-  GOOD_SIGNAL_THRESHOLD,
   HEAD_PITCH_OFF_POS,
   HEAD_ROLL_OFF_RAD,
   HEAD_YAW_POSE_GRACE_END,
   HEAD_YAW_POSE_GRACE_START,
+  LOOK_UP_SEVERITY_ONSET,
   PERCLOS_WINDOW,
   ROLL_SEV_SPAN_RAD,
-  SCORE_DROP_PER_SEC,
-  SCORE_RECOVER_PER_SEC,
   SCORE_TICK_HZ,
   T_OFF_DECAY_PER_SEC,
   T_OFF_IGNORE_SEC,
@@ -38,11 +36,12 @@ import {
   T_ROLL_IGNORE_SEC,
   T_ROLL_MED_CAP_SEC,
   T_ROLL_SOFT_CAP_SEC,
+  T_LOOK_DECAY_PER_SEC,
+  T_LOOK_IGNORE_SEC,
+  T_LOOK_MED_CAP_SEC,
+  T_LOOK_SOFT_CAP_SEC,
   W_LOOK_UP,
-  W_PERCLOS_DIRECT,
   W_YAWN,
-  WARMUP_PENALTY_MULT,
-  WARMUP_SEC,
   YAWN_LIP_THRESHOLD,
 } from './neurogaze-config.js'
 
@@ -50,16 +49,14 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
 
 const NOTIFY_COOLDOWN_MS = 5 * 60 * 1000
 const FOCUS_MILESTONE_MS = 60 * 60 * 1000
-const FACE_ABSENT_PAUSE_MS = 30 * 1000
-
-const PEAK_THRESHOLD = 82
-const PEAK_SUSTAIN_MS = 8 * 60 * 1000
-const PEAK_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000
-
-const DIP_PEAK_FLOOR = 82
-const DIP_SCORE_UPPER = 78
-const DIP_SCORE_LOWER = 55
-const DIP_NOTIFY_COOLDOWN_MS = 20 * 60 * 1000
+const EYE_COMFORT_BASELINE_BPM = 15
+const EYE_COMFORT_WINDOW_MS = 45_000
+const EYE_COMFORT_GRACE_MS = 7_000
+const EYE_COMFORT_EMA_ALPHA = 0.18
+const EYE_COMFORT_DECAY_K = 1.2
+const EYE_COMFORT_MAX_DECAY_PER_SEC = 1.6
+const EYE_COMFORT_RECOVER_PER_SEC = 0.7
+const ENERGY_PERCLOS_GRACE = 0.08
 
 const TICK_SEC = 1 / SCORE_TICK_HZ
 
@@ -117,6 +114,26 @@ function gRoll(T) {
   return g
 }
 
+function gLook(T) {
+  if (T <= T_LOOK_IGNORE_SEC) return 0
+  let g = 0
+  if (T > T_LOOK_IGNORE_SEC) {
+    const softEnd = Math.min(T, T_LOOK_SOFT_CAP_SEC)
+    const softSpan = softEnd - T_LOOK_IGNORE_SEC
+    g += G_LOOK_ALPHA * softSpan
+  }
+  if (T > T_LOOK_SOFT_CAP_SEC) {
+    g += G_LOOK_BETA * Math.min(
+      T - T_LOOK_SOFT_CAP_SEC,
+      T_LOOK_MED_CAP_SEC - T_LOOK_SOFT_CAP_SEC,
+    )
+  }
+  if (T > T_LOOK_MED_CAP_SEC) {
+    g += G_LOOK_GAMMA * (Math.exp((T - T_LOOK_MED_CAP_SEC) / G_LOOK_LONG_TAU) - 1)
+  }
+  return g
+}
+
 function rollSeverity(rollRad) {
   const a = Math.abs(rollRad)
   if (a <= HEAD_ROLL_OFF_RAD) return 0
@@ -130,11 +147,6 @@ function yawnSeverity(lip) {
 
 function lookUpSeverity(u) {
   return clamp01(u / 0.14)
-}
-
-function warmupPenaltyScale(sessionStartMs, nowMs) {
-  const u = Math.min(1, (nowMs - sessionStartMs) / 1000 / WARMUP_SEC)
-  return WARMUP_PENALTY_MULT + (1 - WARMUP_PENALTY_MULT) * u
 }
 
 function eyeGateMul(perclos) {
@@ -156,10 +168,6 @@ export class InsightEngine {
   recentInsights = []
 
   #lastNotifyTs = 0
-  #lastPeakNotifyTs = 0
-  #lastDipNotifyTs = 0
-  #peakStreakSince = null
-  #recentPeakScore = 0
   #goodFocusSince = Date.now()
   #sessionStart = Date.now()
   #lastUpdateTs = 0
@@ -174,14 +182,19 @@ export class InsightEngine {
   #tOff = 0
   /** Seconds accumulated while head tilt (roll) exceeds upright band — see gRoll(T_roll). */
   #tRoll = 0
+  /** Seconds accumulated while look-up is sustained — see gLook(T_look). */
+  #tLook = 0
   #perclosBuf = []
-  #lastFaceTs = Date.now()
-  #pausedSince = null
+  // Last smoothed frame values for score components + high-level bars.
   #lastPitch = 0
   #lastRoll = 0
   #lastYaw = 0
   #lastLip = 0
   #lastLookUp = 0
+  #eyeComfortScore = 100
+  #blinkTsWindow = []
+  #eyeComfortSmoothedBpm = EYE_COMFORT_BASELINE_BPM
+  #eyeComfortCalibratedStartTs = 0
 
   get sessionMinutes() {
     return Math.floor((Date.now() - this.#sessionStart) / 60_000)
@@ -191,63 +204,71 @@ export class InsightEngine {
     return !this.#calibrated
   }
 
-  get isPaused() {
-    return this.#pausedSince !== null
-  }
-
   /** Snapshot for live dashboard bars (call after `update`). */
   getLiveMetrics() {
     return {
       tOff: this.#tOff,
       tRoll: this.#tRoll,
+      tLook: this.#tLook,
       rawScore: this.#rawScore,
       perclos: this.#perclosFraction(),
     }
   }
 
+  #scoreComponents(perclos, pitch, roll, yaw, lip, lookUp) {
+    const pg = poseGraceFromYaw(Math.abs(yaw))
+    const gate = eyeGateMul(perclos)
+
+    const phoneBad = clamp01(fPitch(pitch) * pg * gPhone(this.#tOff, perclos) * gate)
+
+    const rollBad = rollSeverity(roll) * pg * gRoll(this.#tRoll) * gate
+    const yawnBad = W_YAWN * yawnSeverity(lip)
+    const lookBad = W_LOOK_UP * lookUpSeverity(lookUp) * gLook(this.#tLook)
+    // Posture reacts to sustained tilt (T_roll) and inherits part of T_off posture drift.
+    const postureBad = clamp01(rollBad + yawnBad + lookBad + phoneBad * 0.6)
+
+    // Energy remains PERCLOS-only with a small blink grace band.
+    const perclosEnergy = clamp01(
+      (perclos - ENERGY_PERCLOS_GRACE) / (1 - ENERGY_PERCLOS_GRACE),
+    )
+    const energyBad = clamp01(perclosEnergy * 0.4)
+    const eyeComfortScore = Math.max(0, Math.min(100, this.#eyeComfortScore))
+    const engagementScore = 100 * (1 - phoneBad)
+    const postureScore = 100 * (1 - postureBad)
+    const energyScore = 100 * (1 - energyBad)
+    const combinedScore =
+      (eyeComfortScore + engagementScore + postureScore + energyScore) / 4
+
+    return {
+      eyeComfort: Math.round(eyeComfortScore),
+      engagement: Math.round(engagementScore),
+      posture: Math.round(postureScore),
+      energy: Math.round(energyScore),
+      combinedScore,
+    }
+  }
+
   /**
-   * Human-readable 0-100 scores for the default dashboard panel.
-   * Buckets match the engine's own #dominantLowScoreSignal so the targeted
-   * insight copy ("Rest your eyes", "Bring gaze to screen", etc.) stays
-   * coherent with whichever bar is lowest.
-   *
-   * Yaw is a *grace* signal (poseGrace fades pitch/roll penalties on
-   * ultrawide / multi-monitor setups) — never a direct penalty.
+   * UI-facing 0-100 breakdown bars used by dashboard.html.
+   * Shares the same component math path as the core score tick.
    */
   getHighLevelScores() {
     const perclos = this.#perclosFraction()
-    const pg = poseGraceFromYaw(Math.abs(this.#lastYaw))
-    const gate = eyeGateMul(perclos)
+    const parts = this.#scoreComponents(
+      perclos,
+      this.#lastPitch,
+      this.#lastRoll,
+      this.#lastYaw,
+      this.#lastLip,
+      this.#lastLookUp,
+    )
 
-    // Eye Comfort — PERCLOS direct (fraction of frames with EAR < EAR_THRESHOLD
-    // over a ~2 s window). 0% closed → 100, 40%+ closed → 0.
-    const eyeComfort = Math.round(100 * clamp01(1 - perclos / 0.40))
-
-    // Engagement — the engine's "phone-down" term:
-    //   fPitch(pitch) · poseGrace · gPhone(T_off, perclos) · eyeGate
-    // Short glances return ~0 (T_off ignore window) by design; sustained
-    // chin-down accrues T_off and drags the bar down through the gPhone tiers.
-    const phoneBad = clamp01(fPitch(this.#lastPitch) * pg * gPhone(this.#tOff, perclos) * gate)
-    const engagement = Math.round(100 * (1 - phoneBad))
-
-    // Posture — max over head tilt (rollSev · poseGrace · gRoll(T_roll) · gate),
-    // yawn (W_YAWN · yawnSev), and look-up/ceiling gaze (W_LOOK_UP · lookUpSev).
-    // Matches the posture bucket in #dominantLowScoreSignal.
-    const rollW = rollSeverity(this.#lastRoll) * pg * gRoll(this.#tRoll) * gate
-    const yawnP = yawnSeverity(this.#lastLip)
-    const lookP = lookUpSeverity(this.#lastLookUp)
-    const postBad = clamp01(Math.max(rollW, W_YAWN * yawnP, W_LOOK_UP * lookP))
-    const posture = Math.round(100 * (1 - postBad))
-
-    // Stamina — engine's own ramp: sev ramps 0→0.55 over minutes 45→90, then caps.
-    // Additional fatigue drag from PERCLOS and yawn so drowsy long sessions
-    // show up as worse than merely-long fresh ones.
-    const mins = this.sessionMinutes
-    const staminaSev = mins >= 45 ? Math.min(0.55, (mins - 45) / 45) : 0
-    let stamina = 100 * (1 - staminaSev) - perclos * 40 - yawnP * 15
-    stamina = Math.max(0, Math.min(100, stamina))
-
-    return { eyeComfort, engagement, posture, stamina: Math.round(stamina) }
+    return {
+      eyeComfort: parts.eyeComfort,
+      engagement: parts.engagement,
+      posture: parts.posture,
+      energy: parts.energy,
+    }
   }
 
   update({
@@ -271,46 +292,22 @@ export class InsightEngine {
       this.#perclosBuf = []
       this.#tOff = 0
       this.#tRoll = 0
-      this.#tickDebt = 0
-
-      // Preserve the main-branch pause behavior so away time does not age the
-      // session, while still clearing Andrew's live neurogaze accumulators.
-      if (
-        this.#pausedSince === null &&
-        now - this.#lastFaceTs >= FACE_ABSENT_PAUSE_MS
-      ) {
-        this.#pausedSince = this.#lastFaceTs + FACE_ABSENT_PAUSE_MS
-      }
-
-      if (this.isPaused) this.status = 'Paused'
-      else if (this.#calibrated) this.status = 'Away'
-      else this.status = 'Waiting for face...'
-
+      this.#tLook = 0
+      this.#resetEyeComfort()
+      this.status = this.#calibrated ? 'Away' : 'Waiting for face...'
       this.#pushDisplay()
       return this.score
     }
-
-    if (this.#pausedSince !== null) {
-      const pausedDuration = now - this.#pausedSince
-      this.#sessionStart += pausedDuration
-      this.#goodFocusSince += pausedDuration
-      if (this.#peakStreakSince !== null) this.#peakStreakSince += pausedDuration
-      if (this.#lastNotifyTs) this.#lastNotifyTs += pausedDuration
-      if (this.#lastPeakNotifyTs) this.#lastPeakNotifyTs += pausedDuration
-      if (this.#lastDipNotifyTs) this.#lastDipNotifyTs += pausedDuration
-      this.#pausedSince = null
-      this.#lastUpdateTs = now
-      this.#tickDebt = 0
-    }
-    this.#lastFaceTs = now
 
     if (!geometryReliable) {
       this.#perclosBuf = []
       this.#tOff = 0
       this.#tRoll = 0
+      this.#tLook = 0
       this.#tickDebt = 0
       this.#lastUpdateTs = now
-      this.status = "Can't see face clearly"
+      this.#resetEyeComfort()
+      this.status = this.#calibrated ? 'Away' : "Can't see face clearly"
       this.#pushDisplay()
       return this.score
     }
@@ -322,6 +319,7 @@ export class InsightEngine {
       this.#displayScore = 100
       this.#tOff = 0
       this.#tRoll = 0
+      this.#tLook = 0
       this.#tickDebt = 0
     }
 
@@ -336,6 +334,13 @@ export class InsightEngine {
     this.#lastLip = lipNormSmoothed
     this.#lastLookUp = lookUpNormSmoothed
 
+    this.#updateEyeComfort(
+      now,
+      dtSec,
+      blinkJustCompleted,
+      concentrationFrameTrusted,
+    )
+
     this.#pushPerclos(ear)
 
     if (this.#calibrated) {
@@ -347,6 +352,12 @@ export class InsightEngine {
         concentrationFrameTrusted,
         ear,
       )
+      this.#integrateTLook(
+        dtSec,
+        lookUpNormSmoothed,
+        concentrationFrameTrusted,
+        ear,
+      )
     }
 
     const perclos = this.#perclosFraction()
@@ -355,8 +366,6 @@ export class InsightEngine {
       this.#tickDebt += dtSec
       const maxSteps = 4
       let steps = 0
-      const penScale = warmupPenaltyScale(this.#sessionStart, now)
-
       while (this.#tickDebt >= TICK_SEC && steps < maxSteps) {
         this.#tickDebt -= TICK_SEC
         steps++
@@ -367,23 +376,8 @@ export class InsightEngine {
           yawSmoothed,
           lipNormSmoothed,
           lookUpNormSmoothed,
-          penScale,
         )
       }
-    }
-
-    if (blinkJustCompleted && this.#calibrated && concentrationFrameTrusted) {
-      const sp = Math.min(
-        BLINK_SPIKE_CAP,
-        BLINK_SPIKE_BASE + lastCompletedBlinkDurationMs * BLINK_SPIKE_PER_MS,
-      )
-      this.#rawScore = Math.min(
-        100,
-        Math.max(
-          0,
-          this.#rawScore - sp * warmupPenaltyScale(this.#sessionStart, now),
-        ),
-      )
     }
 
     this.#pushDisplay()
@@ -396,18 +390,6 @@ export class InsightEngine {
     else this.status = 'Need a Break'
 
     if (this.score < 70) this.#goodFocusSince = now
-
-    if (this.score < DIP_SCORE_LOWER) {
-      this.#recentPeakScore = 0
-      this.#peakStreakSince = null
-    } else {
-      this.#recentPeakScore = Math.max(this.#recentPeakScore, this.score)
-      if (this.score >= PEAK_THRESHOLD) {
-        if (this.#peakStreakSince === null) this.#peakStreakSince = now
-      } else {
-        this.#peakStreakSince = null
-      }
-    }
 
     if (!this.isCalibrating) {
       this.#scoreSum += this.score
@@ -458,35 +440,82 @@ export class InsightEngine {
     }
   }
 
-  #scoreTick(perclos, pitch, roll, yaw, lip, lookUp, penScale) {
-    const pg = poseGraceFromYaw(Math.abs(yaw))
-    const fp = fPitch(pitch) * pg
-    const g = gPhone(this.#tOff, perclos)
-    const rollS = rollSeverity(roll) * pg
-    const gr = gRoll(this.#tRoll)
-    const rollWeighted = rollS * gr
-    const gate = eyeGateMul(perclos)
-    const headTerm = (fp * g + rollWeighted) * gate
+  /** Mirrors T_off/T_roll timing so brief look-up glances do not penalize. */
+  #integrateTLook(dtSec, lookUp, trusted, ear) {
+    const eyesOpenish = ear >= EAR_THRESHOLD - 0.02
+    const lookSev = lookUpSeverity(lookUp)
+    const lookClocking = lookSev >= LOOK_UP_SEVERITY_ONSET
 
-    const y = yawnSeverity(lip)
-    const u = lookUpSeverity(lookUp)
+    if (lookClocking && trusted && eyesOpenish) {
+      this.#tLook += dtSec
+    } else if (!lookClocking) {
+      this.#tLook = Math.max(0, this.#tLook - dtSec * T_LOOK_DECAY_PER_SEC)
+    }
+  }
 
-    const bad = clamp01(
-      headTerm + W_YAWN * y + W_LOOK_UP * u + W_PERCLOS_DIRECT * perclos,
+  #scoreTick(perclos, pitch, roll, yaw, lip, lookUp) {
+    const { combinedScore } = this.#scoreComponents(
+      perclos,
+      pitch,
+      roll,
+      yaw,
+      lip,
+      lookUp,
     )
+    // Main score is a direct combination of the same four subscores.
+    this.#rawScore = Math.min(100, Math.max(0, combinedScore))
+  }
 
-    const forward = (1 - fp * 0.92) * (1 - rollWeighted * 0.9)
-    const auxClear = (1 - y * 0.85) * (1 - u * 0.85)
-    const good = clamp01(forward * auxClear * (perclos < 0.35 ? 1 : 1 - perclos))
+  #resetEyeComfort() {
+    this.#eyeComfortScore = 100
+    this.#blinkTsWindow = []
+    this.#eyeComfortSmoothedBpm = EYE_COMFORT_BASELINE_BPM
+    this.#eyeComfortCalibratedStartTs = 0
+  }
 
-    if (bad > BAD_SIGNAL_THRESHOLD) {
-      this.#rawScore -= SCORE_DROP_PER_SEC * bad * penScale * TICK_SEC
-    } else if (good > GOOD_SIGNAL_THRESHOLD) {
-      this.#rawScore +=
-        SCORE_RECOVER_PER_SEC * good * (100 - this.#rawScore) * TICK_SEC
+  #updateEyeComfort(now, dtSec, blinkJustCompleted, trusted) {
+    if (!this.#calibrated) {
+      this.#eyeComfortScore = 100
+      this.#eyeComfortSmoothedBpm = EYE_COMFORT_BASELINE_BPM
+      this.#eyeComfortCalibratedStartTs = 0
+      return
+    }
+    if (!this.#eyeComfortCalibratedStartTs) this.#eyeComfortCalibratedStartTs = now
+
+    if (blinkJustCompleted && trusted) {
+      this.#blinkTsWindow.push(now)
     }
 
-    this.#rawScore = Math.min(100, Math.max(0, this.#rawScore))
+    const cutoff = now - EYE_COMFORT_WINDOW_MS
+    while (this.#blinkTsWindow.length && this.#blinkTsWindow[0] < cutoff) {
+      this.#blinkTsWindow.shift()
+    }
+
+    const blinkCount = this.#blinkTsWindow.length
+    const windowSec = EYE_COMFORT_WINDOW_MS / 1000
+    const currentBpmRaw = (blinkCount / windowSec) * 60
+    this.#eyeComfortSmoothedBpm +=
+      (currentBpmRaw - this.#eyeComfortSmoothedBpm) * EYE_COMFORT_EMA_ALPHA
+
+    if (now - this.#eyeComfortCalibratedStartTs < EYE_COMFORT_GRACE_MS) {
+      this.#eyeComfortScore = 100
+      return
+    }
+
+    const deficit = Math.max(0, EYE_COMFORT_BASELINE_BPM - this.#eyeComfortSmoothedBpm)
+    const ratio = deficit / EYE_COMFORT_BASELINE_BPM
+
+    if (deficit > 0) {
+      const decayRate = Math.min(
+        EYE_COMFORT_MAX_DECAY_PER_SEC,
+        EYE_COMFORT_DECAY_K * ratio * ratio,
+      )
+      this.#eyeComfortScore -= decayRate * dtSec
+    } else {
+      this.#eyeComfortScore += EYE_COMFORT_RECOVER_PER_SEC * dtSec
+    }
+
+    this.#eyeComfortScore = Math.max(0, Math.min(100, this.#eyeComfortScore))
   }
 
   #pushDisplay() {
@@ -509,139 +538,47 @@ export class InsightEngine {
     }
   }
 
-  #dominantLowScoreSignal(perclos) {
-    const pg = poseGraceFromYaw(Math.abs(this.#lastYaw))
-    const phone =
-      fPitch(this.#lastPitch) * pg * gPhone(this.#tOff, perclos) * eyeGateMul(perclos)
-    const roll =
-      rollSeverity(this.#lastRoll) *
-      pg *
-      gRoll(this.#tRoll) *
-      eyeGateMul(perclos)
-    const posture = Math.max(
-      roll,
-      W_YAWN * yawnSeverity(this.#lastLip),
-      W_LOOK_UP * lookUpSeverity(this.#lastLookUp),
-    )
-    const eyeComfort = W_PERCLOS_DIRECT * perclos
-    const stamina =
-      this.sessionMinutes >= 45 ? Math.min(0.55, (this.sessionMinutes - 45) / 45) : 0
-
-    return [
-      ['eyeComfort', eyeComfort],
-      ['phoneDown', phone],
-      ['posture', posture],
-      ['stamina', stamina],
-    ].sort((a, b) => b[1] - a[1])[0][0]
-  }
-
   #maybeFireInsight(now) {
     if (this.isCalibrating) return
     if (now - this.#lastNotifyTs < NOTIFY_COOLDOWN_MS) return
 
     const focusedFor = now - this.#goodFocusSince
-    const perclos = this.#perclosFraction()
 
     let insight = null
 
     if (this.score < 35) {
       insight = {
-        title: 'Time for a break 🧠',
+        title: 'Time for a break',
         body: pick([
           'Step away, take a few deep breaths, and look at something far away. Two minutes is all it takes to recharge.',
           'Get up, refill your water, and walk around for 2 minutes. Your brain restores faster when your body moves.',
           'Close your eyes for 30 seconds, then take a short walk. Even micro-breaks reset your ability to concentrate.',
-          'Stand up, stretch your arms overhead, and look out a window. A real pause, even a quick one, beats pushing through.',
-          'Your brain has been working hard. Two minutes of doing nothing is surprisingly powerful. Step away from the screen.',
+          'Stand up, stretch your arms overhead, and look out a window. A real pause — even a quick one — beats pushing through.',
+          'Your brain has been working hard. Two minutes of doing nothing is surprisingly powerful — step away from the screen.',
         ]),
       }
     } else if (this.score < 55) {
-      const targeted = {
-        eyeComfort: {
-          title: 'Rest your eyes 👁',
-          body: pick([
-            'Look at something at least 20 feet away for 20 seconds. Letting your eye muscles fully relax prevents the slow drain that builds up over hours.',
-            'Blink slowly 10 times, then focus on something in the distance. Staring at a screen suppresses blinking, which dries your eyes faster than you notice.',
-            'Cover your eyes with your palms for 30 seconds with no light and no screen. It is one of the fastest ways to reduce eye fatigue.',
-            'Look out a window and let your eyes adjust to natural distance. Your eye muscles have been locked at the same focal length for a while.',
-            'Take 20 seconds to look far away and do a few slow blinks. A little deliberate rest goes a long way for recovery.',
-          ]),
-        },
-        phoneDown: {
-          title: 'Hard to focus? 👀',
-          body: pick([
-            'Bring your gaze back to screen height and let it stay there for a minute. Longer phone-down stretches pull the score down more than quick glances.',
-            'Face the camera again and level your head. The score climbs back gradually once steady forward attention returns.',
-            'If you just checked your phone, finish the check and put it away. Stop-start glances cost more than a clean return to the task.',
-            'Lift your chin a little and keep your eyes forward for a minute. Recovery is gradual once the off-task posture clears.',
-            'Good lighting and a level head help the model tell a quick glance from a longer drift. Reset your posture and lock back in.',
-          ]),
-        },
-        posture: {
-          title: 'Time for a reset 🪑',
-          body: pick([
-            'Roll your shoulders back, level your head, and unclench your jaw. Physical tension and mental fatigue feed each other.',
-            'Sit up tall, put both feet flat on the floor, and take three deep breaths. Your posture signals your brain whether to be alert or tired.',
-            'Take 30 seconds to stretch your neck slowly side to side. Tension there quietly drains your energy.',
-            'Check in with your body. Are you hunching, tilting your head, or holding your breath? Relax each one intentionally.',
-            'Stand up for 60 seconds and shake out your hands. Sustained sitting and head tilt slowly chip away at alertness.',
-          ]),
-        },
-        stamina: {
-          title: `${this.sessionMinutes} minutes in ⏱`,
-          body: pick([
-            'A short break now compounds. Five minutes off the screen extends your next focus window significantly.',
-            'The best time to take a break is before you feel like you need one. Step away now and come back stronger.',
-            'Your brain runs in natural focus cycles. A short reset now keeps the next one just as sharp.',
-            'Hydrate, stand up, and give your eyes a rest. Those three together are the fastest recovery combo.',
-          ]),
-        },
-      }
-      insight = targeted[this.#dominantLowScoreSignal(perclos)]
-    } else if (
-      this.score >= DIP_SCORE_LOWER &&
-      this.score < DIP_SCORE_UPPER &&
-      this.#recentPeakScore >= DIP_PEAK_FLOOR &&
-      now - this.#lastDipNotifyTs >= DIP_NOTIFY_COOLDOWN_MS
-    ) {
       insight = {
-        title: 'Focus is slipping 🌊',
+        title: 'Concentration slipping',
         body: pick([
-          'Your focus is starting to dip. Look at something about 20 feet away for 20 seconds.',
-          'Mental fatigue is rising. Close your eyes and do 10 slow breaths with a long exhale.',
-          'You are starting to drift. Stand up for 30 seconds. A quick reset keeps the streak alive.',
-          'Focus is trending down. Sip some water and roll your shoulders back before the dip deepens.',
-          'Early fatigue signals. Look out a window for 20 seconds and let your eyes release.',
+          'Face the camera, level your head, and ease your jaw — the score rewards steady forward attention.',
+          'Longer phone-down stretches pull the score down more than quick glances; it climbs back gradually when you re-engage.',
+          'Let the score recover gradually once distractions ease.',
+          "If you're fighting sleep, a short walk beats staring.",
+          'Good lighting and framing keep landmark detection reliable.',
         ]),
       }
-      this.#lastDipNotifyTs = now
     } else if (focusedFor > FOCUS_MILESTONE_MS && this.score >= 80) {
       insight = {
-        title: 'An hour in the zone 🔥',
+        title: 'An hour in the zone',
         body: pick([
-          'Seriously impressive. Take a real 10-minute break, move, hydrate, and you will come back just as sharp.',
-          "That's a full hour of deep work. Most people cannot sustain that. Protect the streak with a proper break before the next round.",
-          'An hour of real focus is rare. Reward it with 10 minutes completely away from your screen. Your brain has earned it.',
-          'You have been in flow for an hour. A 10-minute break now resets your cognitive resources for another strong session.',
-          'One hour down. A real break now, not just scrolling, keeps your performance high for the rest of the day.',
+          'Seriously impressive. Take a real 10-minute break — move, hydrate, and you will come back just as sharp.',
+          "That's a full hour of deep work — most people can't sustain that. Protect the streak with a proper break before the next round.",
+          'An hour of real focus is rare. Reward it with 10 minutes completely away from your screen — your brain has earned it.',
+          "You've been in flow for an hour. A 10-minute break now resets your cognitive resources for another strong session.",
+          'One hour down. A real break now — not just scrolling — keeps your performance high for the rest of the day.',
         ]),
       }
-    } else if (
-      this.#peakStreakSince !== null &&
-      now - this.#peakStreakSince >= PEAK_SUSTAIN_MS &&
-      now - this.#lastPeakNotifyTs >= PEAK_NOTIFY_COOLDOWN_MS
-    ) {
-      insight = {
-        title: 'Locked in 🔥',
-        body: pick([
-          'You are in a peak focus window right now. Silence notifications and start a 25-minute deep work block.',
-          'Your focus is locked in. Protect this window, silence notifications, and batch your hardest task now.',
-          'Deep focus engaged. This is the moment to tackle the thing you have been putting off.',
-          'You are running hot. Ride the wave and commit to 25 uninterrupted minutes on your highest-value task.',
-          'Peak focus detected. Block the next 25 minutes, close every other tab, and go.',
-        ]),
-      }
-      this.#lastPeakNotifyTs = now
     }
 
     if (!insight) return

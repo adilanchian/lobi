@@ -57,8 +57,11 @@ export const LOOK_UP_GAP_BASELINE = 0.14
 export const LOOK_UP_PITCH_DEADBAND = -0.02
 export const LOOK_UP_PITCH_GAIN = 1.15
 
-/** Roll (rad) of outer-eye line vs horizontal beyond this → not upright. */
-export const HEAD_ROLL_OFF_RAD = 0.11
+/**
+ * Roll (rad) of outer-eye line vs horizontal beyond this -> not upright.
+ * Set to about 20 deg so small natural tilt stays in the grace band.
+ */
+export const HEAD_ROLL_OFF_RAD = 0.349
 
 /** Iris motion gate — mean normalized speed above this freezes MA writes. */
 export const MOTION_GATE_MEAN_SPEED = 0.28
@@ -123,8 +126,8 @@ export const WARMUP_PENALTY_MULT = 0.5
 /** Frames with a face before scoring runs (stabilization). */
 export const CALIBRATION_FRAMES = 30
 
-/** Tiered g(T_off): T_off in seconds while chin-down (phone proxy). */
-export const T_OFF_IGNORE_SEC = 5
+/** Tiered g(T_off): T_off in seconds while chin-down (phone proxy), no initial delay. */
+export const T_OFF_IGNORE_SEC = 0
 export const T_OFF_SOFT_CAP_SEC = 15
 export const T_OFF_MED_CAP_SEC = 30
 
@@ -145,7 +148,7 @@ export const G_PHONE_LONG_TAU = 14
 export const EYE_BLEND_MIN = 0.28
 
 /** PERCLOS-like proxy: rolling window length (samples at ~tracker rate). */
-export const PERCLOS_WINDOW = 28
+export const PERCLOS_WINDOW = 45
 
 /** Map closed-eye fraction to fatigue gate: lerp(EYE_GATE_MIN, 1, perclos). */
 export const EYE_GATE_MIN = 0.38
@@ -161,17 +164,33 @@ export const T_OFF_DECAY_PER_SEC = 2.2
 
 /**
  * Tiered h(T_roll): seconds accumulated while |roll| exceeds HEAD_ROLL_OFF_RAD
- * (after pose-grace), analogous to T_off for chin-down. Decays when upright.
+ * (after pose-grace), analogous to T_off for chin-down. No initial delay.
  */
-export const T_ROLL_IGNORE_SEC = 5
+export const T_ROLL_IGNORE_SEC = 0
 export const T_ROLL_SOFT_CAP_SEC = 15
 export const T_ROLL_MED_CAP_SEC = 30
-export const G_ROLL_ALPHA = 0.01
+export const G_ROLL_ALPHA = 0.018
 export const G_ROLL_BETA = 0.038
 export const G_ROLL_GAMMA = 0.052
 export const G_ROLL_LONG_TAU = 14
 /** When head is level (or yaw grace suppresses roll), T_roll decays per real second. */
 export const T_ROLL_DECAY_PER_SEC = 2.2
+
+/**
+ * Tiered h(T_look): seconds accumulated while look-up severity is sustained.
+ * Adds the same delayed-onset behavior as T_off/T_roll so quick glances up are ignored.
+ */
+export const T_LOOK_IGNORE_SEC = 5
+export const T_LOOK_SOFT_CAP_SEC = 15
+export const T_LOOK_MED_CAP_SEC = 30
+export const G_LOOK_ALPHA = 0.01
+export const G_LOOK_BETA = 0.038
+export const G_LOOK_GAMMA = 0.052
+export const G_LOOK_LONG_TAU = 14
+/** Minimum look-up severity to start accumulating T_look. */
+export const LOOK_UP_SEVERITY_ONSET = 0.22
+/** When look-up is below onset, T_look decays per real second. */
+export const T_LOOK_DECAY_PER_SEC = 2.2
 
 /** Blink spike: base + duration * scale, capped. */
 export const BLINK_SPIKE_BASE = 1.0

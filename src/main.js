@@ -91,13 +91,20 @@ function openDashboard() {
     minHeight: 600,
   })
 
-  // Hide to tray on the red-X close button — unless we're actually quitting,
-  // in which case let the window close so Electron can tear down renderers
-  // (camera, MediaPipe, tracker interval) and any staged update can install.
+  // macOS: red-X hides to tray unless we're truly quitting.
+  // Windows/Linux: red-X should fully quit the app.
   mainWindow.on('close', (e) => {
-    if (isQuitting) return
-    e.preventDefault()
-    mainWindow.hide()
+    if (process.platform === 'darwin') {
+      if (isQuitting) return
+      e.preventDefault()
+      mainWindow.hide()
+      return
+    }
+
+    if (!isQuitting) {
+      isQuitting = true
+      app.quit()
+    }
   })
 
   mainWindow.on('closed', () => {

@@ -269,7 +269,7 @@
         <div id="stats-simple" class="simple-stats">
           <div class="simple-stat-row">
             <div class="simple-stat-header">
-              <span class="simple-stat-label">Eye Comfort</span>
+              <span class="simple-stat-label">Screen Strain</span>
               <span class="simple-stat-value" id="ss-eyes-num">--</span>
             </div>
             <div class="simple-track"><div class="simple-fill" id="ss-eyes-fill"></div></div>
@@ -290,7 +290,7 @@
           </div>
           <div class="simple-stat-row">
             <div class="simple-stat-header">
-              <span class="simple-stat-label">Stamina</span>
+              <span class="simple-stat-label">Energy</span>
               <span class="simple-stat-value" id="ss-stam-num">--</span>
             </div>
             <div class="simple-track"><div class="simple-fill" id="ss-stam-fill"></div></div>
@@ -334,6 +334,10 @@
         <div class="stat-row" title="Seconds head tilt (roll) beyond upright — tiers like T off">
           <span class="stat-name">T roll</span><span class="stat-val" id="stat-troll-num">—</span>
           <div class="stat-track"><div class="stat-fill" id="stat-troll-fill"></div></div>
+        </div>
+        <div class="stat-row" title="Seconds sustained look-up beyond grace — delayed tiers like T off">
+          <span class="stat-name">T look</span><span class="stat-val" id="stat-tlook-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-tlook-fill"></div></div>
         </div>
         <div class="stat-row" title="PERCLOS proxy (eyes closed fraction)">
           <span class="stat-name">PERC</span><span class="stat-val" id="stat-perc-num">—</span>
@@ -442,7 +446,7 @@
   // EMA-smoothed targets for the 4 high-level bars. The engine tick (~15/s)
   // otherwise resets the CSS transition mid-flight and the motion looks jumpy.
   const SMOOTH_ALPHA = 0.12
-  const smoothedScores = { eyeComfort: null, engagement: null, posture: null, stamina: null }
+  const smoothedScores = { eyeComfort: null, engagement: null, posture: null, energy: null }
 
   function ema(key, target) {
     const prev = smoothedScores[key]
@@ -470,14 +474,14 @@
         document.getElementById(`${id}-fill`).style.width = '0%'
       })
       smoothedScores.eyeComfort = smoothedScores.engagement = null
-      smoothedScores.posture = smoothedScores.stamina = null
+      smoothedScores.posture = smoothedScores.energy = null
       return
     }
     const s = engine.getHighLevelScores()
     setHighLevelBar('ss-eyes-fill', 'ss-eyes-num', ema('eyeComfort', s.eyeComfort))
     setHighLevelBar('ss-eng-fill',  'ss-eng-num',  ema('engagement', s.engagement))
     setHighLevelBar('ss-post-fill', 'ss-post-num', ema('posture',    s.posture))
-    setHighLevelBar('ss-stam-fill', 'ss-stam-num', ema('stamina',    s.stamina))
+    setHighLevelBar('ss-stam-fill', 'ss-stam-num', ema('energy',     s.energy))
   }
 
   const EAR_VIZ_MAX = 0.42
@@ -539,6 +543,9 @@
 
     const troll = live.tRoll ?? 0
     setStatBar('stat-troll-fill', 'stat-troll-num', Math.min(1, troll / 40), `${troll.toFixed(1)}s`, null)
+
+    const tlook = live.tLook ?? 0
+    setStatBar('stat-tlook-fill', 'stat-tlook-num', Math.min(1, tlook / 40), `${tlook.toFixed(1)}s`, null)
 
     const pc = live.perclos ?? 0
     setStatBar('stat-perc-fill', 'stat-perc-num', pc, `${(pc * 100).toFixed(0)}%`, 'perc')

@@ -333,6 +333,88 @@ Internal `rawScore` ∈ [0, 100]. UI `score` is a rounded EMA:
 
 ---
 
+## Insight notification system (`src/insights.js`)
+
+Notifications are driven by a **stateful chain** in `InsightEngine` rather than a random picker, so each message is aware of what fired before it.
+
+### Tier classification
+
+| Score range | Tier |
+|---|---|
+| < 35 | `break` |
+| 35–54 | `slipping` |
+| 55–79 | `ok` |
+| ≥ 80 | `good` |
+
+### Chain state (private fields)
+
+| Field | Purpose |
+|---|---|
+| `#insightChain` | `{ tier, depth, scoreAtFire }` — tracks the last fired tier and how many times that tier has repeated |
+| `#highScoreSince` | Timestamp when score first crossed ≥ 80, used for flow milestones |
+| `#flowMilestone` | Which flow milestone has already fired (`20min` / `60min`) so they only fire once per streak |
+| `#bodyDecks` | Per-bucket shuffled decks for no-repeat body rotation |
+
+### Chain logic (`#buildInsight`)
+
+- **Same tier repeating** → `depth++` → message references the prior check-in ("still" / "again" language).
+- **Slipping → break escalation** → dedicated "things slipped further" message instead of a generic break notification.
+- **Recovery** (previous tier was bad, current score ≥ 70) → one-time comeback message.
+- **Flow milestones**: 20 min sustained ≥ 80 → "You're in flow"; 60 min sustained → "An hour in the zone". Replaces the old `#goodFocusSince` field.
+
+### Dynamic cooldown (`#escalatingCooldown`)
+
+Standard cooldown is **5 min**. Drops to **~3 min** when the score has fallen 12+ points since the last insight and the current tier is still negative. Prevents long silences during a real focus crash.
+
+### No-repeat body rotation (`#pickBody`)
+
+Each bucket (e.g. `'slipping-1'`, `'break-2'`) maintains its own shuffled deck. All options in a bucket are cycled before any repeats, and the same body is never shown back to back. Replaced the old global `pick()` call.
+
+### Notification copy
+
+All negative-tier bodies were rewritten with specific, science-backed, actionable tips in plain language: box breathing, 20-20-20 rule, hydration, vagus nerve exhale, movement breaks, cold water, and nap-vs-caffeine guidance.
+
+---
+
+## Dashboard UI (`src/dashboard.html`)
+
+### Stat label tooltips
+
+The three subscore labels in the stats panel (**Screen Strain**, **Engagement**, **Energy**) each have a small `ⓘ` icon. Hovering reveals a styled bubble explaining the metric in plain English:
+
+- **Screen Strain** — blink rate / eye strain proxy.
+- **Engagement** — head position (chin-down / looking away).
+- **Energy** — eye drooping / alertness (PERCLOS).
+
+Implemented as CSS-only `.info-tip` / `.info-tip-bubble` classes. No JS changes required.
+
+### Update flow
+
+A dismissable **update banner** appears above the footer whenever a new version has been downloaded and is ready to install. It shows the version number and a "Restart" button — no need to spot the small footer text.
+
+The footer "Check for updates" button still works for manual checks; its label reflects the current download state (checking / downloading / ready).
+
+---
+
+## Auto-update (`src/main.js`)
+
+- **Startup check** — `autoUpdater.checkForUpdates()` runs once when the app is ready (packaged builds only).
+- **Periodic check** — a `setInterval` re-runs the check every **6 hours** so users with the app open all day still receive updates automatically.
+- **Tray menu** — the context menu item label reflects the current update state and changes dynamically:
+
+| State | Tray label |
+|---|---|
+| Idle | Check for Updates |
+| Checking | Checking for Updates… |
+| Downloading | Downloading vX.Y.Z… |
+| Ready | Restart to Install vX.Y.Z |
+| Up to date | Up to Date ✓ |
+| Error | Update Check Failed — Retry |
+
+- **State seeding on window open** — a `get-update-state` IPC handler lets the renderer query the current state immediately on load, fixing a bug where the "Restart" button required multiple clicks if the update had downloaded before the dashboard window was opened.
+
+---
+
 ## How to test (manual)
 
 1. Run the app, grant camera, open the dashboard.
@@ -343,3 +425,5 @@ Internal `rawScore` ∈ [0, 100]. UI `score` is a rounded EMA:
 6. **Eye comfort**: Avoid blinking for 30–60 s — eye comfort score should visibly decay as smoothed BPM falls below 15.
 7. **Session decay**: Check `activeSessionMin` in `getLiveMetrics()` — decay factor is negligible for the first hour, then gradually steepens.
 8. **Motion gate**: Rapidly move head/eyes — `concentrationFrameTrusted` false should pause score ticks.
+9. **Update banner**: In a packaged build, trigger an update download and reopen the dashboard — the banner should appear immediately without needing to click anything.
+10. **Tray update states**: After triggering an update check, right-click the tray icon — the menu item label should reflect the current download state in real time.

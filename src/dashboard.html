@@ -122,6 +122,62 @@
       gap: 6px;
     }
     .simple-stat-icon { font-size: 14px; }
+
+    /* ── Info tooltip ────────────────────────────────────────────────────── */
+    .info-tip {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      cursor: default;
+    }
+    .info-tip-icon {
+      font-size: 10px;
+      color: var(--muted);
+      opacity: 0.55;
+      line-height: 1;
+      transition: opacity 0.15s;
+      user-select: none;
+    }
+    .info-tip:hover .info-tip-icon { opacity: 1; }
+    .info-tip-bubble {
+      display: none;
+      position: absolute;
+      left: 50%;
+      bottom: calc(100% + 8px);
+      transform: translateX(-50%);
+      width: 190px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: var(--text);
+      z-index: 50;
+      pointer-events: none;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    .info-tip:hover .info-tip-bubble { display: block; }
+    /* little arrow */
+    .info-tip-bubble::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 5px solid transparent;
+      border-top-color: var(--border);
+    }
+    .info-tip-bubble::before {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border: 4px solid transparent;
+      border-top-color: var(--bg);
+      z-index: 1;
+    }
     .simple-stat-value {
       font-size: 16px;
       font-weight: 800;
@@ -269,21 +325,39 @@
         <div id="stats-simple" class="simple-stats">
           <div class="simple-stat-row">
             <div class="simple-stat-header">
-              <span class="simple-stat-label">Screen Strain</span>
+              <span class="simple-stat-label">
+                Screen Strain
+                <span class="info-tip">
+                  <span class="info-tip-icon">ⓘ</span>
+                  <span class="info-tip-bubble">How often you're blinking. Staring at screens reduces your blink rate, which dries out your eyes and builds up fatigue. More blinking = less strain = higher score.</span>
+                </span>
+              </span>
               <span class="simple-stat-value" id="ss-eyes-num">--</span>
             </div>
             <div class="simple-track"><div class="simple-fill" id="ss-eyes-fill"></div></div>
           </div>
           <div class="simple-stat-row">
             <div class="simple-stat-header">
-              <span class="simple-stat-label">Engagement</span>
+              <span class="simple-stat-label">
+                Engagement
+                <span class="info-tip">
+                  <span class="info-tip-icon">ⓘ</span>
+                  <span class="info-tip-bubble">Whether you're actually looking at your screen. Head tilting down (like checking your phone) or turning away for too long drops this score. Straight ahead = fully engaged.</span>
+                </span>
+              </span>
               <span class="simple-stat-value" id="ss-eng-num">--</span>
             </div>
             <div class="simple-track"><div class="simple-fill" id="ss-eng-fill"></div></div>
           </div>
           <div class="simple-stat-row">
             <div class="simple-stat-header">
-              <span class="simple-stat-label">Energy</span>
+              <span class="simple-stat-label">
+                Energy
+                <span class="info-tip">
+                  <span class="info-tip-icon">ⓘ</span>
+                  <span class="info-tip-bubble">How alert and awake you look. Tracked by how often your eyes are drooping or closing (beyond normal blinks). Heavy eyelids = low energy = lower score.</span>
+                </span>
+              </span>
               <span class="simple-stat-value" id="ss-stam-num">--</span>
             </div>
             <div class="simple-track"><div class="simple-fill" id="ss-stam-fill"></div></div>
@@ -362,6 +436,30 @@
   </div>
 
   <div id="tracker-error" style="display:none" class="tracker-offline"></div>
+
+  <!-- ── Update banner (shown when a download is ready to install) ─────────── -->
+  <div id="update-banner" style="display:none; align-items:center; justify-content:space-between; gap:8px;
+    background:color-mix(in srgb, var(--accent) 15%, var(--surface));
+    border:1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+    border-radius:8px; padding:8px 12px; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; gap:6px; min-width:0;">
+      <span style="font-size:14px;">🎉</span>
+      <span id="update-banner-text" style="font-size:12px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+        Update ready
+      </span>
+    </div>
+    <div style="display:flex; align-items:center; gap:6px; flex-shrink:0;">
+      <button id="update-install-btn" class="no-drag"
+        style="background:var(--accent); border:none; border-radius:5px; color:#fff;
+               font-size:11px; font-weight:600; font-family:inherit; cursor:pointer; padding:4px 10px;">
+        Restart
+      </button>
+      <button id="update-dismiss-btn" class="no-drag"
+        style="background:none; border:none; color:var(--muted); font-size:14px; cursor:pointer; padding:0; line-height:1; font-family:inherit;">
+        ✕
+      </button>
+    </div>
+  </div>
 
   <!-- ── Footer: version + update ──────────────────────────────────────────── -->
   <div style="display:flex; justify-content:space-between; align-items:center; padding-top:6px; border-top:1px solid var(--border);">
@@ -818,25 +916,18 @@
   start()
 
   // ── Version + update footer ───────────────────────────────────────────────
-  const versionLbl = document.getElementById('version-label')
-  const updateBtn  = document.getElementById('update-btn')
+  const versionLbl      = document.getElementById('version-label')
+  const updateBtn       = document.getElementById('update-btn')
+  const updateBanner    = document.getElementById('update-banner')
+  const updateBannerTxt = document.getElementById('update-banner-text')
+  const updateInstallBtn = document.getElementById('update-install-btn')
+  const updateDismissBtn = document.getElementById('update-dismiss-btn')
 
   window.lobi?.getVersion().then(v => { versionLbl.textContent = `v${v}` })
 
-  updateBtn.addEventListener('click', () => {
-    if (updateBtn.dataset.ready === 'true') {
-      window.lobi?.installUpdate()
-      return
-    }
-    updateBtn.textContent = 'Checking…'
-    updateBtn.disabled    = true
-    window.lobi?.checkForUpdate()
-  })
-
-  window.lobi?.onUpdateState(({ state, version }) => {
-    updateBtn.disabled        = false
-    updateBtn.dataset.ready   = 'false'
-    updateBtn.style.color     = 'var(--muted)'
+  function applyUpdateState({ state, version }) {
+    updateBtn.disabled      = false
+    updateBtn.style.color   = 'var(--muted)'
 
     if (state === 'checking') {
       updateBtn.textContent = 'Checking…'
@@ -845,17 +936,44 @@
       updateBtn.textContent = `Downloading v${version}…`
       updateBtn.disabled    = true
     } else if (state === 'ready') {
-      updateBtn.textContent       = `Restart to install v${version} ✓`
-      updateBtn.style.color       = 'var(--green)'
-      updateBtn.dataset.ready     = 'true'
+      updateBtn.textContent       = `v${version} ready — restart`
+      updateBtn.style.color       = 'var(--accent)'
+      updateBannerTxt.textContent = `v${version} is downloaded and ready to install`
+      updateBanner.style.display  = 'flex'
     } else if (state === 'up-to-date') {
+      updateBanner.style.display = 'none'
       updateBtn.textContent = 'Up to date ✓'
       setTimeout(() => { updateBtn.textContent = 'Check for updates' }, 4_000)
     } else if (state === 'error') {
       updateBtn.textContent = 'Check failed — try again'
       setTimeout(() => { updateBtn.textContent = 'Check for updates' }, 4_000)
+    } else {
+      updateBtn.textContent = 'Check for updates'
     }
+  }
+
+  // Seed UI from whatever state the updater is already in (e.g. update downloaded
+  // before the window was opened — without this the Restart button never works on
+  // first click because dataset.ready is never set).
+  window.lobi?.getUpdateState().then(applyUpdateState)
+
+  updateBtn.addEventListener('click', () => {
+    if (updateBtn.style.color === 'var(--accent)') {
+      window.lobi?.installUpdate()
+      return
+    }
+    updateBtn.textContent = 'Checking…'
+    updateBtn.disabled    = true
+    window.lobi?.checkForUpdate()
   })
+
+  updateInstallBtn.addEventListener('click', () => window.lobi?.installUpdate())
+
+  updateDismissBtn.addEventListener('click', () => {
+    updateBanner.style.display = 'none'
+  })
+
+  window.lobi?.onUpdateState(applyUpdateState)
 </script>
 
 </body>

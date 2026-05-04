@@ -137,11 +137,39 @@ let updateState   = UpdateState.IDLE
 let updateVersion = null   // set once we know what version is available
 let focusStatus   = 'Starting up...'
 
+function buildUpdateMenuItem() {
+  switch (updateState) {
+    case UpdateState.CHECKING:
+      return { label: 'Checking for Updates…', enabled: false }
+    case UpdateState.DOWNLOADING:
+      return { label: `Downloading v${updateVersion}…`, enabled: false }
+    case UpdateState.READY:
+      return {
+        label: `Restart to Install v${updateVersion}`,
+        click: () => { isQuitting = true; autoUpdater.quitAndInstall() },
+      }
+    case UpdateState.UP_TO_DATE:
+      return { label: 'Up to Date ✓', enabled: false }
+    case UpdateState.ERROR:
+      return {
+        label: 'Update Check Failed — Retry',
+        click: () => { if (app.isPackaged) autoUpdater.checkForUpdates() },
+      }
+    default: // IDLE
+      return {
+        label: 'Check for Updates',
+        click: () => { if (app.isPackaged) autoUpdater.checkForUpdates() },
+      }
+  }
+}
+
 function buildTrayMenu() {
   const menu = Menu.buildFromTemplate([
     { label: `Lobi  ·  ${focusStatus}`, enabled: false },
     { type: 'separator' },
     { label: 'Open Dashboard', click: openDashboard },
+    { type: 'separator' },
+    buildUpdateMenuItem(),
     { type: 'separator' },
     { label: 'Quit Lobi', click: () => { isQuitting = true; app.quit() } },
   ])
@@ -232,6 +260,8 @@ ipcMain.handle('update-session', (_e, startTime, title) => {
 })
 
 ipcMain.handle('get-version', () => app.getVersion())
+
+ipcMain.handle('get-update-state', () => ({ state: updateState, version: updateVersion }))
 
 ipcMain.handle('check-for-update', () => {
   if (app.isPackaged) autoUpdater.checkForUpdates()
@@ -337,7 +367,11 @@ app.whenReady().then(() => {
   })
 
   // Only check in packaged builds — autoUpdater hangs in dev mode (electron .)
-  if (app.isPackaged) autoUpdater.checkForUpdates()
+  // Also poll every 6 hours since this app lives in the tray indefinitely.
+  if (app.isPackaged) {
+    autoUpdater.checkForUpdates()
+    setInterval(() => autoUpdater.checkForUpdates(), 6 * 60 * 60 * 1000)
+  }
 })
 
 // macOS: tray keeps the app alive when the dashboard is hidden (window still exists). Windows/Linux: last window closed → quit.

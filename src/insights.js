@@ -57,7 +57,14 @@ import {
   T_YAW_DECAY_PER_SEC,
 } from './neurogaze-config.js'
 
-const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
+function shuffle(arr) {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
 
 const NOTIFY_COOLDOWN_MS = 5 * 60 * 1000
 const FOCUS_MILESTONE_MS = 60 * 60 * 1000
@@ -194,7 +201,10 @@ export class InsightEngine {
   recentInsights = []
 
   #lastNotifyTs = 0
-  #goodFocusSince = Date.now()
+  #highScoreSince = null   // timestamp when score first reached ≥ 80; null when below
+  #flowMilestone = 0       // 0 = none fired, 1 = 20-min fired, 2 = 60-min fired
+  #insightChain = { tier: null, depth: 0, scoreAtFire: 100 }
+  #bodyDecks = new Map()  // key → { queue: string[], lastShown: string | null }
   #sessionStart = Date.now()
   #lastUpdateTs = 0
   #scoreSum = 0
@@ -427,7 +437,12 @@ export class InsightEngine {
     else if (this.score >= 35) this.status = 'Low Focus'
     else this.status = 'Need a Break'
 
-    if (this.score < 70) this.#goodFocusSince = now
+    if (this.score >= 80) {
+      if (!this.#highScoreSince) this.#highScoreSince = now
+    } else {
+      this.#highScoreSince = null
+      if (this.score < 70) this.#flowMilestone = 0
+    }
 
     if (!this.isCalibrating) {
       this.#scoreSum += this.score
@@ -593,49 +608,37 @@ export class InsightEngine {
     }
   }
 
+  #pickBody(key, options) {
+    let deck = this.#bodyDecks.get(key)
+    if (!deck) {
+      deck = { queue: [], lastShown: null }
+      this.#bodyDecks.set(key, deck)
+    }
+    if (deck.queue.length === 0) {
+      const pool = options.length > 1 && deck.lastShown
+        ? options.filter(o => o !== deck.lastShown)
+        : options.slice()
+      deck.queue = shuffle(pool)
+    }
+    const body = deck.queue.pop()
+    deck.lastShown = body
+    return body
+  }
+
+  #scoreTier(s) {
+    if (s < 35) return 'break'
+    if (s < 55) return 'slipping'
+    if (s >= 80) return 'good'
+    return 'ok'
+  }
+
   #maybeFireInsight(now) {
     if (this.isCalibrating) return
-    if (now - this.#lastNotifyTs < NOTIFY_COOLDOWN_MS) return
 
-    const focusedFor = now - this.#goodFocusSince
+    const cooldown = this.#escalatingCooldown(now)
+    if (now - this.#lastNotifyTs < cooldown) return
 
-    let insight = null
-
-    if (this.score < 35) {
-      insight = {
-        title: 'Time for a break',
-        body: pick([
-          'Step away, take a few deep breaths, and look at something far away. Two minutes is all it takes to recharge.',
-          'Get up, refill your water, and walk around for 2 minutes. Your brain restores faster when your body moves.',
-          'Close your eyes for 30 seconds, then take a short walk. Even micro-breaks reset your ability to concentrate.',
-          'Stand up, stretch your arms overhead, and look out a window. A real pause — even a quick one — beats pushing through.',
-          'Your brain has been working hard. Two minutes of doing nothing is surprisingly powerful — step away from the screen.',
-        ]),
-      }
-    } else if (this.score < 55) {
-      insight = {
-        title: 'Concentration slipping',
-        body: pick([
-          'Face the camera, level your head, and ease your jaw — the score rewards steady forward attention.',
-          'Longer phone-down stretches pull the score down more than quick glances; it climbs back gradually when you re-engage.',
-          'Let the score recover gradually once distractions ease.',
-          "If you're fighting sleep, a short walk beats staring.",
-          'Good lighting and framing keep landmark detection reliable.',
-        ]),
-      }
-    } else if (focusedFor > FOCUS_MILESTONE_MS && this.score >= 80) {
-      insight = {
-        title: 'An hour in the zone',
-        body: pick([
-          'Seriously impressive. Take a real 10-minute break — move, hydrate, and you will come back just as sharp.',
-          "That's a full hour of deep work — most people can't sustain that. Protect the streak with a proper break before the next round.",
-          'An hour of real focus is rare. Reward it with 10 minutes completely away from your screen — your brain has earned it.',
-          "You've been in flow for an hour. A 10-minute break now resets your cognitive resources for another strong session.",
-          'One hour down. A real break now — not just scrolling — keeps your performance high for the rest of the day.',
-        ]),
-      }
-    }
-
+    const insight = this.#buildInsight(now)
     if (!insight) return
 
     this.#lastNotifyTs = now
@@ -647,5 +650,158 @@ export class InsightEngine {
 
     window.lobi?.sendInsight(insight.title, insight.body)
     window.dispatchEvent(new CustomEvent('lobi-insight', { detail: insight }))
+  }
+
+  /** Allow a shorter cooldown when the score is actively worsening. */
+  #escalatingCooldown(now) {
+    const chain = this.#insightChain
+    if (
+      chain.tier !== null &&
+      this.score < chain.scoreAtFire - 12 &&
+      this.#scoreTier(this.score) !== 'ok' &&
+      this.#scoreTier(this.score) !== 'good'
+    ) {
+      return NOTIFY_COOLDOWN_MS * 0.6   // ~3 min when things are getting worse
+    }
+    return NOTIFY_COOLDOWN_MS
+  }
+
+  #buildInsight(now) {
+    const tier = this.#scoreTier(this.score)
+    const chain = this.#insightChain
+    const prevTier = chain.tier
+
+    // ── Flow / milestone ────────────────────────────────────────────────────
+    if (tier === 'good' && this.#highScoreSince) {
+      const highFor = now - this.#highScoreSince
+      if (highFor >= FOCUS_MILESTONE_MS && this.#flowMilestone < 2) {
+        this.#flowMilestone = 2
+        this.#insightChain = { tier: 'good', depth: 2, scoreAtFire: this.score }
+        return {
+          title: 'An hour in the zone',
+          body: this.#pickBody('good-60', [
+            'Seriously impressive. Take a real 10-minute break — move, hydrate, and you will come back just as sharp.',
+            "That's a full hour of deep work — most people can't sustain that. Protect the streak with a proper break before the next round.",
+            'An hour of real focus is rare. Reward it with 10 minutes completely away from your screen — your brain has earned it.',
+            "You've been in flow for an hour. A 10-minute break now resets your cognitive resources for another strong session.",
+            'One hour down. A real break now — not just scrolling — keeps your performance high for the rest of the day.',
+          ]),
+        }
+      }
+      const FLOW_ONSET_MS = 20 * 60 * 1000
+      if (highFor >= FLOW_ONSET_MS && this.#flowMilestone < 1) {
+        this.#flowMilestone = 1
+        this.#insightChain = { tier: 'good', depth: 1, scoreAtFire: this.score }
+        return {
+          title: "You're in flow",
+          body: this.#pickBody('good-20', [
+            "20 minutes of solid focus — you're in the zone. Keep the momentum going.",
+            "Flow state locked in. Distractions off, you're doing great — ride this out.",
+            "You've been locked in for 20 minutes straight. This is the good stuff.",
+            "That's a clean 20-minute stretch. You're in it — don't break the spell.",
+          ]),
+        }
+      }
+    }
+
+    // ── Recovery ────────────────────────────────────────────────────────────
+    if (
+      (prevTier === 'break' || prevTier === 'slipping') &&
+      this.score >= 70
+    ) {
+      this.#insightChain = { tier: 'ok', depth: 0, scoreAtFire: this.score }
+      return {
+        title: 'Back in it',
+        body: this.#pickBody('recovery', [
+          'Solid recovery — whatever you just did, it worked. Keep that in your toolkit.',
+          "Score's back up after that dip. Good to see you back in the zone.",
+          "That's a proper comeback. You're back on track — nice work.",
+          'You pulled it back. That kind of reset is what keeps long sessions productive.',
+        ]),
+      }
+    }
+
+    // ── Negative tiers ───────────────────────────────────────────────────────
+    if (tier === 'ok' || tier === 'good') return null
+
+    const isEscalation = prevTier === 'slipping' && tier === 'break'
+    const isSameTier = prevTier === tier
+    const depth = isSameTier ? chain.depth + 1 : 1
+
+    this.#insightChain = { tier, depth, scoreAtFire: this.score }
+
+    if (tier === 'break') {
+      if (isEscalation) {
+        return {
+          title: 'Things slipped further',
+          body: this.#pickBody('break-escalation', [
+            "It dropped further since the last nudge. The fastest way back is physical — stand up, walk around for two minutes, then return. Movement works better than willpower here.",
+            "Gone from drifting to a real dip. Splashing cold water on your face or wrists triggers a reflex that slows your heart rate and brings focus back. Worth trying before a longer break.",
+            "The slide continued. A 10-minute break raises your baseline back to where it needs to be — staying put and grinding through it usually makes the next hour worse, not better.",
+          ]),
+        }
+      }
+      if (depth === 1) {
+        return {
+          title: 'Time for a break',
+          body: this.#pickBody('break-1', [
+            'Get up and move for 2 minutes — even light movement raises the chemicals your brain needs to refocus. Walking to refill your water counts.',
+            'Look at something far away for 20 seconds, then close your eyes for 30. This clears the visual processing load your brain has been carrying.',
+            'Take 5 breaths where your exhale is twice as long as your inhale. It activates your parasympathetic system and resets your mental baseline quickly.',
+            'Step outside for a couple of minutes if you can. Natural light and a change of scene are two of the most effective attention restorers — the research is pretty consistent on this.',
+            'Stand up, stretch your arms overhead, and drink a full glass of water. Hydration and posture are two things that directly affect how clearly your brain runs.',
+          ]),
+        }
+      }
+      if (depth === 2) {
+        return {
+          title: 'Still need that break',
+          body: this.#pickBody('break-2', [
+            "Still in the red. A 10-20 minute break produces more total output than pushing through — your brain after a real rest will outperform your brain right now.",
+            "Score hasn't moved. Walk somewhere, look out a window for a minute — even brief exposure to a natural view measurably restores directed attention.",
+            "Two check-ins at this level. Your brain's focus systems need time fully offline — two minutes with no screen, no phone, no input. It's more restorative than it feels like it should be.",
+          ]),
+        }
+      }
+      return {
+        title: 'Your brain is asking nicely',
+        body: this.#pickBody('break-3', [
+          "A few check-ins deep and still here. A real 10-minute break — no screen — will produce more in the next hour than staying put right now. That's not a guess, that's consistently what the data shows.",
+          "Sustained low focus burns through more energy than it generates. Step away properly — if you can fit in a 10-20 minute nap, it improves subsequent focus more than caffeine for most people.",
+          "You've been in the red long enough that willpower isn't the lever anymore. Your brain needs input — water, movement, or rest. Pick one and do it for real.",
+        ]),
+      }
+    }
+
+    // tier === 'slipping'
+    if (depth === 1) {
+      return {
+        title: 'Concentration slipping',
+        body: this.#pickBody('slipping-1', [
+          'Close any extra tabs and flip your phone face-down. Even having your phone visible quietly drains working memory — out of sight genuinely helps.',
+          'Sit up straight and look directly at your screen. Upright posture signals alertness to your brain and the score will start climbing back.',
+          'Try the 4-7-8 breath: inhale for 4 seconds, hold for 7, exhale for 8. It interrupts scattered thinking and shifts your brain back into focus mode in under a minute.',
+          'Look at something at least 20 feet away for 20 seconds. It cuts eye strain and gives your visual system a micro-reset — both help attention come back.',
+        ]),
+      }
+    }
+    if (depth === 2) {
+      return {
+        title: 'Still drifting',
+        body: this.#pickBody('slipping-2', [
+          "Still slipping since the last check-in. Try a slow exhale that's twice as long as your inhale — it activates the vagus nerve and brings focus back faster than it sounds.",
+          "Drink a glass of water right now. Even mild dehydration quietly degrades concentration — it's one of the fastest and most overlooked fixes.",
+          "Stand up and move around for 60 seconds. A short burst of movement spikes the chemicals your brain uses to stay sharp, and the score usually follows.",
+        ]),
+      }
+    }
+    return {
+      title: 'Hanging in there?',
+      body: this.#pickBody('slipping-3', [
+        "You've been drifting for a while now. A proper 10-minute break — no screen, no scrolling — restores more attentional capacity than pushing through. That's the trade worth making.",
+        'Your brain tires like a muscle. A short walk, even just to the kitchen and back, is one of the most effective cognitive resets — more than caffeine for most people at this stage.',
+        'Persistent drift usually means glucose or hydration is running low. Drink water, grab a small snack, and step away for two minutes. Simple, but it works.',
+      ]),
+    }
   }
 }

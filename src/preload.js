@@ -39,8 +39,9 @@ contextBridge.exposeInMainWorld('lobi', {
   onDisplayCountChange: (callback) => ipcRenderer.on('display-count', (_e, count) => callback(count)),
 
   // Version + updates
-  getVersion:    ()         => ipcRenderer.invoke('get-version'),
-  checkForUpdate: ()        => ipcRenderer.invoke('check-for-update'),
-  installUpdate:  ()        => ipcRenderer.send('install-update'),
-  onUpdateState: (callback) => ipcRenderer.on('update-state', (_e, state) => callback(state)),
+  getVersion:      ()         => ipcRenderer.invoke('get-version'),
+  getUpdateState:  ()         => ipcRenderer.invoke('get-update-state'),
+  checkForUpdate:  ()         => ipcRenderer.invoke('check-for-update'),
+  installUpdate:   ()         => ipcRenderer.send('install-update'),
+  onUpdateState:  (callback)  => ipcRenderer.on('update-state', (_e, state) => callback(state)),
 })

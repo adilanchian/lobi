@@ -1,7 +1,7 @@
 // main.js — Electron main process
 // Handles: app lifecycle, windows, system tray, notifications, IPC routing
 
-const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, session, systemPreferences } = require('electron')
+const { app, BrowserWindow, Tray, Menu, Notification, ipcMain, nativeImage, session, systemPreferences, screen } = require('electron')
 const { autoUpdater } = require('electron-updater')
 const path = require('path')
 const fs   = require('fs')
@@ -244,6 +244,15 @@ ipcMain.handle('check-for-update', () => {
 ipcMain.on('install-update', () => {
   isQuitting = true
   autoUpdater.quitAndInstall()
+})
+
+ipcMain.handle('get-display-count', () => screen.getAllDisplays().length)
+
+// Push an updated count whenever monitors are plugged/unplugged.
+app.whenReady().then(() => {
+  const push = () => mainWindow?.webContents.send('display-count', screen.getAllDisplays().length)
+  screen.on('display-added',   push)
+  screen.on('display-removed', push)
 })
 
 ipcMain.on('reset-onboarding', () => {

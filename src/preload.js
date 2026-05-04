@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('lobi', {
   // Dev helper — resets onboarding state and reopens the setup flow
   resetOnboarding: () => ipcRenderer.send('reset-onboarding'),
 
+  // Display count — used to suppress yaw distraction penalty on multi-monitor setups
+  getDisplayCount:      ()         => ipcRenderer.invoke('get-display-count'),
+  onDisplayCountChange: (callback) => ipcRenderer.on('display-count', (_e, count) => callback(count)),
+
   // Version + updates
   getVersion:    ()         => ipcRenderer.invoke('get-version'),
   checkForUpdate: ()        => ipcRenderer.invoke('check-for-update'),

@@ -283,13 +283,6 @@
           </div>
           <div class="simple-stat-row">
             <div class="simple-stat-header">
-              <span class="simple-stat-label">Posture</span>
-              <span class="simple-stat-value" id="ss-post-num">--</span>
-            </div>
-            <div class="simple-track"><div class="simple-fill" id="ss-post-fill"></div></div>
-          </div>
-          <div class="simple-stat-row">
-            <div class="simple-stat-header">
               <span class="simple-stat-label">Energy</span>
               <span class="simple-stat-value" id="ss-stam-num">--</span>
             </div>
@@ -428,6 +421,11 @@
   const video        = document.getElementById('tracking-video')
   const cameraSelect = document.getElementById('camera-select')
 
+  // ── Display count — kept live so plugging in a monitor takes effect immediately ──
+  let displayCount = 1
+  window.lobi?.getDisplayCount().then(n => { displayCount = n ?? 1 })
+  window.lobi?.onDisplayCountChange(n => { displayCount = n })
+
   // ── Advanced panel toggle ─────────────────────────────────────────────────
   window.toggleAdvanced = function() {
     const panel  = document.getElementById('stats-advanced')
@@ -446,7 +444,7 @@
   // EMA-smoothed targets for the 4 high-level bars. The engine tick (~15/s)
   // otherwise resets the CSS transition mid-flight and the motion looks jumpy.
   const SMOOTH_ALPHA = 0.12
-  const smoothedScores = { eyeComfort: null, engagement: null, posture: null, energy: null }
+  const smoothedScores = { eyeComfort: null, engagement: null, energy: null }
 
   function ema(key, target) {
     const prev = smoothedScores[key]
@@ -468,19 +466,18 @@
 
   function renderSimpleStats() {
     if (engine.isCalibrating) {
-      ['ss-eyes', 'ss-eng', 'ss-post', 'ss-stam'].forEach((id) => {
+      ['ss-eyes', 'ss-eng', 'ss-stam'].forEach((id) => {
         document.getElementById(`${id}-num`).textContent = '--'
         document.getElementById(`${id}-num`).className = 'simple-stat-value'
         document.getElementById(`${id}-fill`).style.width = '0%'
       })
       smoothedScores.eyeComfort = smoothedScores.engagement = null
-      smoothedScores.posture = smoothedScores.energy = null
+      smoothedScores.energy = null
       return
     }
     const s = engine.getHighLevelScores()
     setHighLevelBar('ss-eyes-fill', 'ss-eyes-num', ema('eyeComfort', s.eyeComfort))
     setHighLevelBar('ss-eng-fill',  'ss-eng-num',  ema('engagement', s.engagement))
-    setHighLevelBar('ss-post-fill', 'ss-post-num', ema('posture',    s.posture))
     setHighLevelBar('ss-stam-fill', 'ss-stam-num', ema('energy',     s.energy))
   }
 
@@ -590,7 +587,7 @@
 
   // ── Main update — called ~15x/sec ─────────────────────────────────────────
   function onTrackingUpdate(data) {
-    engine.update(data)
+    engine.update({ ...data, hasMultipleMonitors: displayCount > 1 })
 
     const score  = engine.score
     const colour = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--yellow)' : 'var(--red)'
@@ -760,7 +757,7 @@
     sessionRunning         = true
     sessionLbl.textContent = 'Session: 0m'
     sessionBtn.textContent = 'End Session'
-    sessionBtn.style.color = ''
+    sessionBtn.style.color = 'var(--muted)'
     setSessionBtnEnabled(false)   // re-lock until the next calibration completes
     ring.style.opacity     = ''
     scoreStat.textContent  = 'Loading...'

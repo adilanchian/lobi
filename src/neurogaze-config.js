@@ -128,14 +128,14 @@ export const CALIBRATION_FRAMES = 30
 
 /** Tiered g(T_off): T_off in seconds while chin-down (phone proxy), no initial delay. */
 export const T_OFF_IGNORE_SEC = 0
-export const T_OFF_SOFT_CAP_SEC = 15
-export const T_OFF_MED_CAP_SEC = 30
+export const T_OFF_SOFT_CAP_SEC = 8
+export const T_OFF_MED_CAP_SEC = 18
 
-/** Soft tier [5,15): α·(T−5); keep small. */
-export const G_PHONE_ALPHA = 0.012
+/** Soft tier [0,8s): α·T; blended with eye state. */
+export const G_PHONE_ALPHA = 0.025
 
-/** Confirmed tier [15,30): adds β·(T−15) on top of value at 15s. */
-export const G_PHONE_BETA = 0.045
+/** Confirmed tier [8,18s): adds β·(T−8) on top of value at 8s. */
+export const G_PHONE_BETA = 0.07
 
 /** 30s+: extra ramp (sublinear then stronger). */
 export const G_PHONE_GAMMA = 0.06
@@ -145,7 +145,7 @@ export const G_PHONE_LONG_TAU = 14
  * Phase 2 multiplier: soft ramp mostly suppressed unless eyes “degrade”
  * (PERCLOS proxy high). eyeBlend = EYE_BLEND_MIN + (1-EYE_BLEND_MIN)*perclos.
  */
-export const EYE_BLEND_MIN = 0.28
+export const EYE_BLEND_MIN = 0.55
 
 /** PERCLOS-like proxy: rolling window length (samples at ~tracker rate). */
 export const PERCLOS_WINDOW = 45
@@ -207,3 +207,29 @@ export const BAD_SIGNAL_THRESHOLD = 0.06
 
 /** Good-signal path when above this (stable forward work). */
 export const GOOD_SIGNAL_THRESHOLD = 0.52
+
+// ── Energy PERCLOS sensitivity ────────────────────────────────────────────────
+// Lowered from 0.08 so normal alert users register some energy cost (not just drowsy).
+export const ENERGY_PERCLOS_GRACE = 0.03
+
+// ── Yaw distraction (single-monitor only) ────────────────────────────────────
+// T_yaw accumulates while |yaw| exceeds ONSET on a single-display setup.
+// Suppressed entirely when multiple monitors are detected.
+// Onset raised vs. the pose-grace start (0.26) so minor natural head movement is ignored.
+export const T_YAW_ONSET_NORM     = 0.36
+export const T_YAW_IGNORE_SEC     = 2
+export const T_YAW_SOFT_CAP_SEC   = 10
+export const T_YAW_MED_CAP_SEC    = 22
+export const G_YAW_ALPHA          = 0.014
+export const G_YAW_BETA           = 0.042
+export const G_YAW_GAMMA          = 0.055
+export const G_YAW_LONG_TAU       = 14
+export const T_YAW_DECAY_PER_SEC  = 1.5
+
+// ── Ultradian session decay ───────────────────────────────────────────────────
+// decayFactor = exp( -(activeMinutes / TAU)^BETA )
+// BETA = 2 gives a Gaussian (slow start, accelerating drop) that maps naturally
+// onto 90-min ultradian cycles: −3% at 90 min, −10% at 180 min, −22% at 270 min.
+// TAU is set to one full biological work day (9 h) so the first cycle stays near 1.
+export const SESSION_DECAY_TAU_MIN = 540
+export const SESSION_DECAY_BETA    = 2

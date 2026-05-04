@@ -43,6 +43,18 @@ import {
   W_LOOK_UP,
   W_YAWN,
   YAWN_LIP_THRESHOLD,
+  SESSION_DECAY_TAU_MIN,
+  SESSION_DECAY_BETA,
+  ENERGY_PERCLOS_GRACE,
+  T_YAW_ONSET_NORM,
+  T_YAW_IGNORE_SEC,
+  T_YAW_SOFT_CAP_SEC,
+  T_YAW_MED_CAP_SEC,
+  G_YAW_ALPHA,
+  G_YAW_BETA,
+  G_YAW_GAMMA,
+  G_YAW_LONG_TAU,
+  T_YAW_DECAY_PER_SEC,
 } from './neurogaze-config.js'
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)]
@@ -56,8 +68,6 @@ const EYE_COMFORT_EMA_ALPHA = 0.18
 const EYE_COMFORT_DECAY_K = 1.2
 const EYE_COMFORT_MAX_DECAY_PER_SEC = 1.6
 const EYE_COMFORT_RECOVER_PER_SEC = 0.7
-const ENERGY_PERCLOS_GRACE = 0.08
-
 const TICK_SEC = 1 / SCORE_TICK_HZ
 
 function clamp01(x) {
@@ -134,6 +144,22 @@ function gLook(T) {
   return g
 }
 
+function gYaw(T) {
+  if (T <= T_YAW_IGNORE_SEC) return 0
+  let g = 0
+  if (T > T_YAW_IGNORE_SEC) {
+    const softEnd = Math.min(T, T_YAW_SOFT_CAP_SEC)
+    g += G_YAW_ALPHA * (softEnd - T_YAW_IGNORE_SEC)
+  }
+  if (T > T_YAW_SOFT_CAP_SEC) {
+    g += G_YAW_BETA * Math.min(T - T_YAW_SOFT_CAP_SEC, T_YAW_MED_CAP_SEC - T_YAW_SOFT_CAP_SEC)
+  }
+  if (T > T_YAW_MED_CAP_SEC) {
+    g += G_YAW_GAMMA * (Math.exp((T - T_YAW_MED_CAP_SEC) / G_YAW_LONG_TAU) - 1)
+  }
+  return g
+}
+
 function rollSeverity(rollRad) {
   const a = Math.abs(rollRad)
   if (a <= HEAD_ROLL_OFF_RAD) return 0
@@ -184,6 +210,10 @@ export class InsightEngine {
   #tRoll = 0
   /** Seconds accumulated while look-up is sustained — see gLook(T_look). */
   #tLook = 0
+  /** Seconds accumulated while |yaw| exceeds onset on a single-monitor setup. */
+  #tYaw = 0
+  /** Active seconds: only increments when calibrated, face present, geometry reliable. */
+  #activeSessionSec = 0
   #perclosBuf = []
   // Last smoothed frame values for score components + high-level bars.
   #lastPitch = 0
@@ -191,6 +221,7 @@ export class InsightEngine {
   #lastYaw = 0
   #lastLip = 0
   #lastLookUp = 0
+  #lastHasMultipleMonitors = false
   #eyeComfortScore = 100
   #blinkTsWindow = []
   #eyeComfortSmoothedBpm = EYE_COMFORT_BASELINE_BPM
@@ -210,39 +241,33 @@ export class InsightEngine {
       tOff: this.#tOff,
       tRoll: this.#tRoll,
       tLook: this.#tLook,
+      tYaw: this.#tYaw,
       rawScore: this.#rawScore,
       perclos: this.#perclosFraction(),
+      activeSessionMin: this.#activeSessionSec / 60,
     }
   }
 
-  #scoreComponents(perclos, pitch, roll, yaw, lip, lookUp) {
+  #scoreComponents(perclos, pitch, roll, yaw, lip, lookUp, hasMultipleMonitors) {
     const pg = poseGraceFromYaw(Math.abs(yaw))
     const gate = eyeGateMul(perclos)
 
     const phoneBad = clamp01(fPitch(pitch) * pg * gPhone(this.#tOff, perclos) * gate)
+    const yawBad = hasMultipleMonitors ? 0 : clamp01(gYaw(this.#tYaw) * gate)
 
-    const rollBad = rollSeverity(roll) * pg * gRoll(this.#tRoll) * gate
-    const yawnBad = W_YAWN * yawnSeverity(lip)
-    const lookBad = W_LOOK_UP * lookUpSeverity(lookUp) * gLook(this.#tLook)
-    // Posture reacts to sustained tilt (T_roll) and inherits part of T_off posture drift.
-    const postureBad = clamp01(rollBad + yawnBad + lookBad + phoneBad * 0.6)
-
-    // Energy remains PERCLOS-only with a small blink grace band.
+    // Energy: full PERCLOS range, no artificial floor or cap.
     const perclosEnergy = clamp01(
       (perclos - ENERGY_PERCLOS_GRACE) / (1 - ENERGY_PERCLOS_GRACE),
     )
-    const energyBad = clamp01(perclosEnergy * 0.4)
+    const energyBad = clamp01(perclosEnergy)
     const eyeComfortScore = Math.max(0, Math.min(100, this.#eyeComfortScore))
-    const engagementScore = 100 * (1 - phoneBad)
-    const postureScore = 100 * (1 - postureBad)
+    const engagementScore = 100 * (1 - clamp01(phoneBad + yawBad))
     const energyScore = 100 * (1 - energyBad)
-    const combinedScore =
-      (eyeComfortScore + engagementScore + postureScore + energyScore) / 4
+    const combinedScore = (eyeComfortScore + engagementScore + energyScore) / 3
 
     return {
       eyeComfort: Math.round(eyeComfortScore),
       engagement: Math.round(engagementScore),
-      posture: Math.round(postureScore),
       energy: Math.round(energyScore),
       combinedScore,
     }
@@ -261,12 +286,12 @@ export class InsightEngine {
       this.#lastYaw,
       this.#lastLip,
       this.#lastLookUp,
+      this.#lastHasMultipleMonitors,
     )
 
     return {
       eyeComfort: parts.eyeComfort,
       engagement: parts.engagement,
-      posture: parts.posture,
       energy: parts.energy,
     }
   }
@@ -284,6 +309,7 @@ export class InsightEngine {
     concentrationFrameTrusted = false,
     blinkJustCompleted = false,
     lastCompletedBlinkDurationMs = 0,
+    hasMultipleMonitors = false,
   }) {
     const now = Date.now()
 
@@ -293,6 +319,7 @@ export class InsightEngine {
       this.#tOff = 0
       this.#tRoll = 0
       this.#tLook = 0
+      this.#tYaw = 0
       this.#resetEyeComfort()
       this.status = this.#calibrated ? 'Away' : 'Waiting for face...'
       this.#pushDisplay()
@@ -304,6 +331,7 @@ export class InsightEngine {
       this.#tOff = 0
       this.#tRoll = 0
       this.#tLook = 0
+      this.#tYaw = 0
       this.#tickDebt = 0
       this.#lastUpdateTs = now
       this.#resetEyeComfort()
@@ -333,6 +361,9 @@ export class InsightEngine {
     this.#lastYaw = yawSmoothed
     this.#lastLip = lipNormSmoothed
     this.#lastLookUp = lookUpNormSmoothed
+    this.#lastHasMultipleMonitors = hasMultipleMonitors
+
+    if (this.#calibrated) this.#activeSessionSec += dtSec
 
     this.#updateEyeComfort(
       now,
@@ -357,6 +388,13 @@ export class InsightEngine {
         lookUpNormSmoothed,
         concentrationFrameTrusted,
         ear,
+      )
+      this.#integrateTYaw(
+        dtSec,
+        yawSmoothed,
+        concentrationFrameTrusted,
+        ear,
+        hasMultipleMonitors,
       )
     }
 
@@ -453,6 +491,21 @@ export class InsightEngine {
     }
   }
 
+  #integrateTYaw(dtSec, yaw, trusted, ear, hasMultipleMonitors) {
+    if (hasMultipleMonitors) {
+      this.#tYaw = Math.max(0, this.#tYaw - dtSec * T_YAW_DECAY_PER_SEC)
+      return
+    }
+    const eyesOpenish = ear >= EAR_THRESHOLD - 0.02
+    const yawClocking = Math.abs(yaw) >= T_YAW_ONSET_NORM
+
+    if (yawClocking && trusted && eyesOpenish) {
+      this.#tYaw += dtSec
+    } else if (!yawClocking) {
+      this.#tYaw = Math.max(0, this.#tYaw - dtSec * T_YAW_DECAY_PER_SEC)
+    }
+  }
+
   #scoreTick(perclos, pitch, roll, yaw, lip, lookUp) {
     const { combinedScore } = this.#scoreComponents(
       perclos,
@@ -461,9 +514,11 @@ export class InsightEngine {
       yaw,
       lip,
       lookUp,
+      this.#lastHasMultipleMonitors,
     )
-    // Main score is a direct combination of the same four subscores.
-    this.#rawScore = Math.min(100, Math.max(0, combinedScore))
+    const activeMin = this.#activeSessionSec / 60
+    const decay = Math.exp(-Math.pow(activeMin / SESSION_DECAY_TAU_MIN, SESSION_DECAY_BETA))
+    this.#rawScore = Math.min(100, Math.max(0, combinedScore * decay))
   }
 
   #resetEyeComfort() {

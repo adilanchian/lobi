@@ -61,11 +61,7 @@ Tracker uses **bilateral mean** \(\mathrm{EAR} = (\mathrm{EAR}_L + \mathrm{EAR}_
 - **Blink / closed**: \(\mathrm{EAR} < \texttt{EAR\_THRESHOLD}\) with **`EAR_THRESHOLD` = 0.2** only (one global cutoff in `neurogaze-config.js`).
 - **Note**: The value passed into insights for PERCLOS is the **per-frame EAR** (not the moving-average buffer); the MA buffers in the tracker are used for **smoothed pose/aux** outputs, not for re-exporting EAR.
 
-**Threshold choice**: Many papers use a predetermined **0.2** for blink labeling. Offline sweeps over other cutoffs (e.g. 0.18, 0.225, 0.25) can show different best values for accuracy or AUC on a **specific** dataset (for example smaller apparent eye size, glasses, or driving pose can shift EAR scale). Lobi does **not** vary the cutoff by user or apply **steeper score penalties** when EAR is far below threshold; behavior is intentionally a **single static 0.2** for simplicity and consistency across sessions.
-
 **Why**: EAR is a standard, lightweight proxy for eye openness from landmarks, used for blinks and drowsiness-style signals without iris segmentation.
-
-**Further reading**: Dewi *et al.* discuss fixed EAR thresholds and dataset-dependent behavior (e.g. accuracy vs threshold); the classic EAR definition builds on Soukupová & Čech (CVWW 2016).
 
 ---
 
@@ -73,7 +69,7 @@ Tracker uses **bilateral mean** \(\mathrm{EAR} = (\mathrm{EAR}_L + \mathrm{EAR}_
 
 Let **face height** \(f_h = |y_{152}-y_{10}|\) (chin–forehead), **inter-eye width** \(f_w = |x_{263}-x_{33}|\), eye midpoints in \(x\) and \(y\), nose tip index 4.
 
-### Pitch (chin-down / “downward attention” proxy)
+### Pitch (chin-down / "downward attention" proxy)
 
 \[
 \text{pitch} = \frac{y_{\mathrm{nose}} - \frac{y_{10}+y_{152}}{2}}{f_h}
@@ -87,7 +83,7 @@ Larger **positive** pitch ⇒ nose shifted **down** relative to face box ⇒ **l
 \text{yaw} = \frac{x_{\mathrm{nose}} - x_{\mathrm{eyeMid}}}{f_w}
 \]
 
-Used for **pose grace** (below): large \(|yaw|\) fades pitch/roll penalties because ultrawide monitors and head turns skew 2D landmarks.
+Used for **pose grace** (suppresses pitch/roll penalties on extreme turns) and **T_yaw distraction** (single-monitor only — see below).
 
 ### Roll (head tilt)
 
@@ -97,7 +93,7 @@ Roll is the angle of the outer-eye segment vs horizontal:
 \text{roll} = \mathrm{atan2}(y_{263}-y_{33},\, x_{263}-x_{33})
 \]
 
-**Why**: Roll captures “head on desk / sideways phone” style tilt; pitch captures “looking down”; yaw helps **suppress false positives** when the user is still engaged but turned toward another monitor.
+**Why**: Roll captures "head on desk / sideways phone" style tilt; pitch captures "looking down"; yaw helps **suppress false positives** when the user is still engaged but turned toward another monitor.
 
 Smoothed values `pitchSmoothed`, `yawSmoothed`, `rollRadSmoothed` are **arithmetic means** over the last `FEATURE_MA_WINDOW` accepted samples (see motion gate).
 
@@ -112,7 +108,7 @@ Hysteresis on **smoothed pitch**:
 
 `chinDown` is true only if latched **and** `|yawSmoothed| < HEAD_YAW_MAX_FOR_CHIN_DOWN` (0.44).
 
-**Why**: Hysteresis avoids flicker from landmark noise. Yaw cap avoids treating a **side glance** at another screen as “phone down” when pitch is projection-skewed.
+**Why**: Hysteresis avoids flicker from landmark noise. Yaw cap avoids treating a **side glance** at another screen as "phone down" when pitch is projection-skewed.
 
 ---
 
@@ -130,7 +126,7 @@ Let **gap** \(= (y_{\mathrm{nose}} - y_{\mathrm{eyeMid}}) / f_h\) (nose below ey
 \text{lookUpNorm} = \min(0.4,\; \text{fromGap} + \text{fromPitch})
 \]
 
-**Why**: When the user tilts **back** (ceiling / “away” gaze), the nose–eye vertical gap **shrinks** and pitch goes **more negative** in this formulation; the metric flags that distinct from chin-down.
+**Why**: When the user tilts **back** (ceiling / "away" gaze), the nose–eye vertical gap **shrinks** and pitch goes **more negative** in this formulation; the metric flags that distinct from chin-down.
 
 ---
 
@@ -140,7 +136,7 @@ Let **gap** \(= (y_{\mathrm{nose}} - y_{\mathrm{eyeMid}}) / f_h\) (nose below ey
 \text{lipNorm} = \frac{|y_{14}-y_{13}|}{f_h}
 \]
 
-**Why**: Large sustained mouth opening is used as a **yawn / jaw fatigue** cue (secondary to head pose in the score).
+**Why**: Large sustained mouth opening is used as a **yawn / jaw fatigue** cue.
 
 ---
 
@@ -148,11 +144,9 @@ Let **gap** \(= (y_{\mathrm{nose}} - y_{\mathrm{eyeMid}}) / f_h\) (nose below ey
 
 When eyes are open, the tracker stores the midpoint of **both irises** (indices 468/473) if available, else eye-region fallback, in a **1.5 s** buffer. Over the last **`ANALYSIS_WINDOW_MS` (500 ms)** it computes mean **normalized** speed between consecutive samples (skips \(\Delta t > 200\) ms).
 
-If there are at least **4** samples and mean speed **>** `MOTION_GATE_MEAN_SPEED` (0.28), the frame is **motion-heavy**: feature MA buffers **do not** update (so pose/lip/look-up stay stable during saccades), and `concentrationFrameTrusted` becomes false when combined with open eyes.
+If there are at least **4** samples and mean speed **>** `MOTION_GATE_MEAN_SPEED` (0.28), the frame is **motion-heavy**: feature MA buffers **do not** update, and `concentrationFrameTrusted` becomes false when combined with open eyes.
 
-**Geometry** must also pass `geometryReliable`.
-
-**Why**: Rapid eye/head motion makes single-frame landmarks a poor proxy for “steady work”; gating avoids punishing or smoothing across meaningless jitter.
+**Why**: Rapid eye/head motion makes single-frame landmarks a poor proxy for "steady work"; gating avoids punishing or smoothing across meaningless jitter.
 
 ---
 
@@ -161,7 +155,7 @@ If there are at least **4** samples and mean speed **>** `MOTION_GATE_MEAN_SPEED
 - Transition **closed** (`EAR` < threshold) records `blinkCloseStart`.
 - On reopening, if duration ∈ (50 ms, 800 ms], `blinkJustCompleted` is set and `lastCompletedBlinkDurationMs` stored.
 
-**Why**: Longer closure patterns can indicate fatigue or intentional breaks; the score applies a **spike penalty** after a completed blink (see below).
+Blink events feed the **Eye Comfort** subscore (see below).
 
 ---
 
@@ -169,123 +163,151 @@ If there are at least **4** samples and mean speed **>** `MOTION_GATE_MEAN_SPEED
 
 Not full PERCLOS (percentage of eyelid closure); a **binary window**:
 
-- Each frame with a face: append **1** if \(\mathrm{EAR} < \texttt{EAR\_THRESHOLD}\), else **0**, to a FIFO of length **`PERCLOS_WINDOW`** (28 samples ≈ ~2 s at ~15 Hz).
-- \(\texttt{perclos} = \frac{\sum \text{samples}}{N}\), the fraction of “closed” frames in the window.
+- Each frame with a face: append **1** if \(\mathrm{EAR} < \texttt{EAR\_THRESHOLD}\), else **0**, to a FIFO of length **`PERCLOS_WINDOW`** (45 samples ≈ ~3 s at ~15 Hz).
+- \(\texttt{perclos} = \frac{\sum \text{samples}}{N}\), the fraction of "closed" frames in the window.
 
-**Why**: Mirrors the **spirit** of PERCLOS—**proportion of time eyes appear closed** over a horizon—as a fatigue / droopiness signal without specialized eye cameras.
+**Why**: Mirrors the **spirit** of PERCLOS—proportion of time eyes appear closed—as a fatigue/droopiness signal without specialized eye cameras.
 
 ---
 
-## Sustained “off-task” timers
+## Sustained off-task timers
+
+All four timers share the same accumulate/decay pattern: they tick upward on trusted frames with eyes open and the relevant signal active, and decay back to zero when the signal clears.
 
 ### \(T_{\mathrm{off}}\) — chin-down dwell (phone / reading-down proxy)
 
-While **`chinDown`**, **`concentrationFrameTrusted`**, and “eyes openish” (\(\mathrm{EAR} \ge \texttt{EAR\_THRESHOLD} - 0.02\)):
+Accumulates while **`chinDown`**, **`concentrationFrameTrusted`**, and eyes openish. Decays at `T_OFF_DECAY_PER_SEC` when not chin-down.
 
-\[
-T_{\mathrm{off}} \mathrel{+}= \Delta t
-\]
+Three-tier ramp `gPhone(T, perclos)`:
+- **[0, 8 s)**: soft tier — `G_PHONE_ALPHA · T · eyeBlend(perclos)` where `eyeBlend = EYE_BLEND_MIN + (1−EYE_BLEND_MIN)·perclos`; awake users register at 55% strength (raised from 28% to make short phone checks register sooner).
+- **[8, 18 s)**: confirmed tier — adds `G_PHONE_BETA · (T−8)`.
+- **18 s+**: exponential tail — `G_PHONE_GAMMA · (exp((T−18)/τ) − 1)`.
 
-When **not** chin-down, \(T_{\mathrm{off}}\) decays: \(\max(0,\; T_{\mathrm{off}} - \Delta t \cdot \texttt{T\_OFF\_DECAY\_PER\_SEC})\).
-
-**Why**: Short downward glances are normal; **accumulated** chin-down time matches the design intent in `neurogaze.txt`: micro-distractions &lt; ~5 s ignored, stronger effect after tens of seconds (tiered `gPhone`).
+**Why**: Tightened from 15 s / 30 s windows so brief sustained looks-down register meaningfully rather than requiring 15–30 s of continuous distraction.
 
 ### \(T_{\mathrm{roll}}\) — sustained head roll
 
-Define **roll severity** \(s \in [0,1]\):
+Accumulates while `rollSeverity(roll) × poseGrace(|yaw|) > 0`, trusted, eyes openish. Decays at `T_ROLL_DECAY_PER_SEC`.
 
-\[
-s = \mathrm{clamp01}\!\left(\frac{|\text{roll}| - \texttt{HEAD\_ROLL\_OFF\_RAD}}{\texttt{ROLL\_SEV\_SPAN\_RAD}}\right) \times \texttt{poseGrace}(|yaw|)
-\]
+Three-tier ramp `gRoll(T)` with `G_ROLL_*` and `T_ROLL_*` constants. **Currently tracked but not used in scoring** (available for future reintroduction).
 
-`poseGrace` linearly ramps from 1 at `HEAD_YAW_POSE_GRACE_START` to 0 by `HEAD_YAW_POSE_GRACE_END`.
+### \(T_{\mathrm{look}}\) — sustained look-up
 
-While \(s > 0\), trusted, eyes openish: \(T_{\mathrm{roll}} \mathrel{+}= \Delta t\). Else decay with `T_ROLL_DECAY_PER_SEC`.
+Accumulates while `lookUpSeverity(lookUp) ≥ LOOK_UP_SEVERITY_ONSET`, trusted, eyes openish. Decays at `T_LOOK_DECAY_PER_SEC`.
 
-**Why**: Same **tiered dwell** idea as \(T_{\mathrm{off}}\), but for **sustained head tilt** rather than chin-down.
+Three-tier ramp `gLook(T)`. **Currently tracked but not used in scoring** (available for future reintroduction).
+
+### \(T_{\mathrm{yaw}}\) — sustained lateral gaze (single-monitor only)
+
+Accumulates while `|yaw| ≥ T_YAW_ONSET_NORM` (0.36, roughly 20°+), trusted, eyes openish, **and `hasMultipleMonitors` is false**. When multiple monitors are detected via the Electron `screen` API, `T_yaw` decays immediately and contributes nothing to scoring.
+
+Three-tier ramp `gYaw(T)` with `G_YAW_*` and `T_YAW_*` constants, 2 s grace window before accumulation starts.
+
+**Why**: Repeated sideways glances on a single monitor signal distraction (phone to the side, looking around the room). Multi-monitor users — including laptop + external display — are explicitly excluded because a sustained high yaw angle simply means they're working on their other screen.
 
 ---
 
-## Focus score dynamics (`InsightEngine`)
+## Multi-monitor detection
 
-Internal **`rawScore`** in \([0,100]\); UI **`score`** is rounded **EMA**:
+On startup and whenever a monitor is plugged or unplugged, the Electron main process calls `screen.getAllDisplays()` and pushes the count to the renderer via IPC. The dashboard stores this as `displayCount` and passes `hasMultipleMonitors: displayCount > 1` into every `InsightEngine.update()` call.
+
+A laptop with one external display counts as 2 displays, correctly suppressing yaw penalties.
+
+---
+
+## Focus score: component model (`InsightEngine`)
+
+The score is a **three-component average**, each subscore 0–100, evaluated at `SCORE_TICK_HZ` (8 Hz) when calibrated and `concentrationFrameTrusted`.
+
+### Eye Comfort (blink rate)
+
+Tracks how often the user blinks against a **15 BPM** healthy baseline (stored as `EYE_COMFORT_BASELINE_BPM`). Screen workers typically blink 3–8× per minute, well below this target.
+
+- Blinks are recorded in a **45 s rolling window** (`EYE_COMFORT_WINDOW_MS`).
+- Current BPM is EMA-smoothed toward the raw window rate (α = 0.18 per frame).
+- A **7 s grace** (`EYE_COMFORT_GRACE_MS`) after calibration completes holds the score at 100 while the window fills.
+- **Deficit** = max(0, baseline − smoothedBpm). If deficit > 0, score decays at `min(EYE_COMFORT_MAX_DECAY_PER_SEC, EYE_COMFORT_DECAY_K · ratio²)` per second (quadratic — small deficits decay slowly, large deficits faster). If deficit ≤ 0, score recovers at `EYE_COMFORT_RECOVER_PER_SEC` per second.
+
+### Engagement (phone distraction + lateral gaze)
 
 \[
-\text{display} \leftarrow \texttt{DISPLAY\_SCORE\_SMOOTH}\cdot \text{display} + (1-\texttt{DISPLAY\_SCORE\_SMOOTH})\cdot \text{raw}
+\text{engagementScore} = 100 \times (1 - \mathrm{clamp01}(\text{phoneBad} + \text{yawBad}))
 \]
 
-### Calibration
-
-Until **`CALIBRATION_FRAMES`** consecutive face frames with reliable geometry, the engine stays calibrating (`rawScore`/`displayScore` held at 100, timers cleared).
-
-### Score ticks (only when calibrated **and** `concentrationFrameTrusted`)
-
-Time debt accumulates in seconds; each **`TICK_SEC = 1 / SCORE_TICK_HZ`** (8 Hz), up to 4 steps per `update` call:
-
-**Helper functions (match code):**
-
-- \(f_p = f_{\text{pitch}}(\text{pitch}) \times \texttt{poseGrace}(|yaw|)\) with \(f_{\text{pitch}}\) piecewise linear from `F_PITCH_SOFT` to `HEAD_PITCH_OFF_POS`.
-- \(g = g_{\text{phone}}(T_{\mathrm{off}}, \texttt{perclos})\): tiered ramp with parameters `G_PHONE_*`, `T_OFF_*`; soft tier blends with `eyeSoft(perclos)` below `T_OFF_SOFT_CAP_SEC`.
-- \(g_r = g_{\text{roll}}(T_{\mathrm{roll}})\): analogous tiered ramp (`G_ROLL_*`, `T_ROLL_*`).
-- Roll weight: \(\text{rollWeighted} = s \cdot g_r\) with \(s\) as above.
-- **Eye gate**: \(\text{gate} = \texttt{EYE\_GATE\_MIN} + (1-\texttt{EYE\_GATE\_MIN})\cdot \texttt{perclos}\).
-
-**Head term** (fatigue reduces effective “openness” of penalties):
+Where:
 
 \[
-\text{headTerm} = (f_p \cdot g + \text{rollWeighted}) \cdot \text{gate}
+\text{phoneBad} = \mathrm{clamp01}\!\big(f_{\text{pitch}}(\text{pitch}) \times \text{poseGrace}(|yaw|) \times g_{\text{phone}}(T_{\mathrm{off}}, \text{perclos}) \times \text{gate}\big)
 \]
 
-**Auxiliary severities** (all in \([0,1]\)):
-
-- Yawn: from `lipNorm` above `YAWN_LIP_THRESHOLD`.
-- Look-up: `lookUpSeverity` ≈ \(\min(1,\; u / 0.14)\) for smoothed look-up \(u\).
-
-**Bad signal** (clamped to \([0,1]\)):
-
 \[
-\text{bad} = \mathrm{clamp01}\!\big(\text{headTerm} + \texttt{W\_YAWN}\,y + \texttt{W\_LOOK\_UP}\,u + \texttt{W\_PERCLOS\_DIRECT}\,\texttt{perclos}\big)
+\text{yawBad} = \begin{cases} 0 & \text{if hasMultipleMonitors} \\ \mathrm{clamp01}(g_{\text{yaw}}(T_{\mathrm{yaw}}) \times \text{gate}) & \text{otherwise} \end{cases}
 \]
 
-**Good signal** (clamped):
+**Eye gate**: \(\text{gate} = \texttt{EYE\_GATE\_MIN} + (1-\texttt{EYE\_GATE\_MIN}) \times \texttt{perclos}\) — drowsiness amplifies all penalties.
+
+### Energy (eye closure / fatigue)
 
 \[
-\text{forward} = (1 - 0.92\,f_p)(1 - 0.9\,\text{rollWeighted})
-\]
-\[
-\text{auxClear} = (1 - 0.85\,y)(1 - 0.85\,u)
-\]
-\[
-\text{good} = \mathrm{clamp01}\!\big(\text{forward}\cdot \text{auxClear}\cdot (\texttt{perclos}<0.35 \;?\; 1 : 1-\texttt{perclos})\big)
+\text{perclosEnergy} = \mathrm{clamp01}\!\left(\frac{\text{perclos} - \texttt{ENERGY\_PERCLOS\_GRACE}}{1 - \texttt{ENERGY\_PERCLOS\_GRACE}}\right)
 \]
 
-**Asymmetric update** (with **`penScale`** = warmup ramp 0.5→1 over **`WARMUP_SEC`**):
-
-- If \(\text{bad} > \texttt{BAD\_SIGNAL\_THRESHOLD}\):  
-  \(\text{raw} \mathrel{-}= \texttt{SCORE\_DROP\_PER\_SEC} \cdot \text{bad} \cdot \text{penScale} \cdot \texttt{TICK\_SEC}\)
-- Else if \(\text{good} > \texttt{GOOD\_SIGNAL\_THRESHOLD}\):  
-  \(\text{raw} \mathrel{+}= \texttt{SCORE\_RECOVER\_PER\_SEC} \cdot \text{good} \cdot (100-\text{raw}) \cdot \texttt{TICK\_SEC}\)
-
-Then clamp `raw` to \([0,100]\).
-
-**Why this shape**: Asymmetric **drop vs recover**, tiered dwell for “phone down,” and slower displayed score are exactly the UX and vigilance-inspired behavior spelled out in **`neurogaze.txt`** (task-switching / interruption timing, gradual recovery).
-
-### Blink spike (same `update`, after ticks)
-
-If `blinkJustCompleted` and frame trusted:
-
 \[
-\text{spike} = \min(\texttt{BLINK\_SPIKE\_CAP},\; \texttt{BLINK\_SPIKE\_BASE} + \text{durationMs}\cdot \texttt{BLINK\_SPIKE\_PER\_MS})
+\text{energyScore} = 100 \times (1 - \text{perclosEnergy})
 \]
+
+`ENERGY_PERCLOS_GRACE` is **0.03** (lowered from 0.08) so alert users register some energy cost rather than always sitting at 100. No artificial cap — full PERCLOS range can move the score to 0.
+
+### Combined score
+
 \[
-\text{raw} \mathrel{-}= \text{spike} \cdot \text{penScale}
+\text{combinedScore} = \frac{\text{eyeComfortScore} + \text{engagementScore} + \text{energyScore}}{3}
 \]
 
 ---
 
-## Design notes document (repo)
+## Ultradian session decay
 
-**`neurogaze.txt`** — narrative rationale for asymmetric scoring, tiered \(T_{\mathrm{off}}\) phases (~5 s ignore, soft 5–15 s, stronger 15–30 s, 30 s+), suggested tick rate and EMA smoothing. The **implemented** equations and constants are in **`src/neurogaze-config.js`** and **`src/insights.js`**; where they differ, **code wins**.
+After calibration completes, **active session seconds** (`#activeSessionSec`) accumulate only while the face is present and geometry is reliable — stepping away or poor lighting acts as a natural pause.
+
+At each score tick, the combined score is multiplied by a **Gaussian decay factor**:
+
+\[
+\text{decay} = \exp\!\left(-\left(\frac{t_{\mathrm{active\,min}}}{\texttt{SESSION\_DECAY\_TAU\_MIN}}\right)^{\!\texttt{SESSION\_DECAY\_BETA}}\right)
+\]
+
+With `SESSION_DECAY_TAU_MIN = 540` (9 h, one biological work day) and `SESSION_DECAY_BETA = 2` (Gaussian shape — starts nearly flat, then steepens):
+
+| Active session time | Decay factor | Score penalty |
+|---|---|---|
+| 90 min (end of ultradian cycle 1) | 0.973 | −3% |
+| 180 min (end of cycle 2) | 0.895 | −10% |
+| 270 min (end of cycle 3) | 0.779 | −22% |
+| 360 min (end of cycle 4) | 0.641 | −36% |
+
+**Why**: Ultradian rhythms run in ~90-minute cycles. Cognitive performance degrades across cycles without rest. The Gaussian (β = 2) shape reflects the research pattern: negligible effect in the first cycle, then compounding degradation. The decay resets when a new session starts (`InsightEngine` is reconstructed).
+
+---
+
+## Displayed score
+
+Internal `rawScore` ∈ [0, 100]. UI `score` is a rounded EMA:
+
+\[
+\text{display} \leftarrow \texttt{DISPLAY\_SCORE\_SMOOTH} \cdot \text{display} + (1-\texttt{DISPLAY\_SCORE\_SMOOTH}) \cdot \text{raw}
+\]
+
+**Calibration**: Until `CALIBRATION_FRAMES` consecutive face frames with reliable geometry, the engine stays calibrating (`rawScore`/`displayScore` held at 100, all timers cleared).
+
+**Status labels** (based on displayed score):
+
+| Score | Label |
+|---|---|
+| ≥ 80 | Locked In |
+| ≥ 65 | Focused |
+| ≥ 50 | Drifting |
+| ≥ 35 | Low Focus |
+| < 35 | Need a Break |
 
 ---
 
@@ -297,20 +319,27 @@ If `blinkJustCompleted` and frame trusted:
 | `FEATURE_MA_WINDOW` | Samples in rolling mean for pose / lip / look-up |
 | `SCORE_TICK_HZ` | Internal score integration rate |
 | `DISPLAY_SCORE_SMOOTH` | EMA smoothing for displayed score |
-| `SCORE_DROP_PER_SEC` / `SCORE_RECOVER_PER_SEC` | Asymmetric sensitivity |
-| `T_OFF_*`, `G_PHONE_*` | Tiered chin-down / “phone” penalty ramp |
-| `T_ROLL_*`, `G_ROLL_*` | Tiered sustained-roll penalty ramp |
+| `CALIBRATION_FRAMES` | Face frames required before scoring begins |
+| `T_OFF_SOFT_CAP_SEC` / `T_OFF_MED_CAP_SEC` | Phone-check tier boundaries (8 s / 18 s) |
+| `G_PHONE_*` | Phone penalty ramp coefficients |
+| `EYE_BLEND_MIN` | Soft-zone floor for phone penalty when eyes are open (0.55) |
+| `T_YAW_ONSET_NORM` | Yaw threshold to start accumulating T_yaw (~20°) |
+| `G_YAW_*`, `T_YAW_*` | Lateral gaze penalty ramp (single-monitor only) |
 | `PERCLOS_WINDOW` | Length of binary closed-eye history |
-| `W_YAWN`, `W_LOOK_UP`, `W_PERCLOS_DIRECT` | Auxiliary bad-signal weights |
+| `ENERGY_PERCLOS_GRACE` | PERCLOS fraction below which energy score is unaffected (0.03) |
+| `EYE_COMFORT_BASELINE_BPM` | Target blink rate (15 BPM); deficit drives eye comfort decay |
+| `SESSION_DECAY_TAU_MIN` | Ultradian decay time constant (540 min = 9 h) |
+| `SESSION_DECAY_BETA` | Decay shape exponent (2 = Gaussian) |
 
 ---
 
 ## How to test (manual)
 
-1. Run the app, grant camera, open the dashboard if applicable.
+1. Run the app, grant camera, open the dashboard.
 2. **Calibration**: Hold a normal working pose until calibration completes (~30 stable frames).
-3. **Chin-down**: Look down for 5+ s with eyes open — watch \(T_{\mathrm{off}}\) / score response after ignore window.
-4. **Yaw / multi-monitor**: Turn head sideways — verify pose grace reduces pitch/roll penalties at high \(|yaw|\).
-5. **Fatigue proxy**: Partially close eyes — `perclos` rises; eye gate and `W_PERCLOS_DIRECT` should drag score.
-6. **Motion**: Rapidly move head/eyes — `concentrationFrameTrusted` false should pause score ticks.
-
+3. **Phone check**: Look down for 5–8 s with eyes open — `T_off` should accumulate and engagement score drop.
+4. **Yaw distraction** (single monitor only): Turn head sideways past ~20° and hold — `T_yaw` accumulates and engagement drops. On a multi-monitor setup this should have no effect.
+5. **Energy**: Partially close eyes — `perclos` rises and energy score drops (now responsive from ~3% closure rather than 8%).
+6. **Eye comfort**: Avoid blinking for 30–60 s — eye comfort score should visibly decay as smoothed BPM falls below 15.
+7. **Session decay**: Check `activeSessionMin` in `getLiveMetrics()` — decay factor is negligible for the first hour, then gradually steepens.
+8. **Motion gate**: Rapidly move head/eyes — `concentrationFrameTrusted` false should pause score ticks.

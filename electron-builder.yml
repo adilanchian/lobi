@@ -13,9 +13,7 @@ files:
 # ── macOS ────────────────────────────────────────────────────────────────────
 mac:
   category: public.app-category.productivity
-  icon:
-    - assets/macOS/icon-dark.icns    # macOS 25 and earlier
-    - assets/macOS/lobi.icon         # macOS 26+ (Liquid Glass, compiled via actool)
+  icon: assets/macOS/lobi.icon
 
   identity: "Wind Down Studio, LLC (UWMZP3Q26H)"
   hardenedRuntime: true
@@ -24,9 +22,8 @@ mac:
   entitlements: assets/entitlements.mac.plist
   entitlementsInherit: assets/entitlements.mac.plist
 
-  # Built-in notarization — reads APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD from env
-  notarize:
-    teamId: "UWMZP3Q26H"
+  # Built-in notarization reads APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID from env.
+  notarize: true
 
   # Shown in macOS permission dialogs
   extendInfo:
@@ -41,6 +38,7 @@ mac:
 
 dmg:
   title: "Lobi"
+  icon: assets/macOS/icon-dark.icns
   contents:
     - x: 130
       y: 220

@@ -10,15 +10,25 @@ set -e
 
 BUMP=${1:-patch}
 
-# ── Preflight checks ──────────────────────────────────────────────────────────
-
-if [[ -z "$GH_TOKEN" ]]; then
-  echo "❌  GH_TOKEN is not set. Add it to your ~/.zshrc and run: source ~/.zshrc"
-  exit 1
+# Load local release credentials when present. Values still need to be shell-safe:
+# KEY=value, with quotes around values that contain spaces.
+if [[ -f .env ]]; then
+  set -a
+  source .env
+  set +a
 fi
 
-if [[ -z "$APPLE_ID" || -z "$APPLE_APP_SPECIFIC_PASSWORD" ]]; then
-  echo "❌  APPLE_ID or APPLE_APP_SPECIFIC_PASSWORD is not set. Add them to your ~/.zshrc"
+# ── Preflight checks ──────────────────────────────────────────────────────────
+
+missing=()
+[[ -z "$GH_TOKEN" ]] && missing+=("GH_TOKEN")
+[[ -z "$APPLE_ID" ]] && missing+=("APPLE_ID")
+[[ -z "$APPLE_APP_SPECIFIC_PASSWORD" ]] && missing+=("APPLE_APP_SPECIFIC_PASSWORD")
+[[ -z "$APPLE_TEAM_ID" ]] && missing+=("APPLE_TEAM_ID")
+
+if (( ${#missing[@]} > 0 )); then
+  echo "❌  Missing required release environment variable(s): ${missing[*]}"
+  echo "    Add them to .env or export them from your shell before running this script."
   exit 1
 fi
 

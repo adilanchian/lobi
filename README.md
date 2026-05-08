@@ -276,16 +276,43 @@ At each score tick, the combined score is multiplied by a **Gaussian decay facto
 \text{decay} = \exp\!\left(-\left(\frac{t_{\mathrm{active\,min}}}{\texttt{SESSION\_DECAY\_TAU\_MIN}}\right)^{\!\texttt{SESSION\_DECAY\_BETA}}\right)
 \]
 
-With `SESSION_DECAY_TAU_MIN = 540` (9 h, one biological work day) and `SESSION_DECAY_BETA = 2` (Gaussian shape — starts nearly flat, then steepens):
+With `SESSION_DECAY_TAU_MIN = 200` and `SESSION_DECAY_BETA = 2` (Gaussian shape — starts nearly flat, then steepens):
 
 | Active session time | Decay factor | Score penalty |
 |---|---|---|
-| 90 min (end of ultradian cycle 1) | 0.973 | −3% |
-| 180 min (end of cycle 2) | 0.895 | −10% |
-| 270 min (end of cycle 3) | 0.779 | −22% |
-| 360 min (end of cycle 4) | 0.641 | −36% |
+| 45 min | 0.961 | −4% |
+| 90 min (end of ultradian cycle 1) | 0.845 | −16% |
+| 120 min | 0.726 | −27% |
+| 180 min | 0.444 | −56% |
 
-**Why**: Ultradian rhythms run in ~90-minute cycles. Cognitive performance degrades across cycles without rest. The Gaussian (β = 2) shape reflects the research pattern: negligible effect in the first cycle, then compounding degradation. The decay resets when a new session starts (`InsightEngine` is reconstructed).
+**Why**: Ultradian rhythms run in ~90-minute cycles. Cognitive performance degrades across cycles without rest. TAU = 200 places the steepest part of the curve right at the 90-minute cycle boundary — scoring stays nearly flat for the first 45 minutes, then drops meaningfully as the first cycle closes. Taking a break resets active session time (see Break Boost below). The decay resets fully when a new session starts.
+
+---
+
+## Break detection and boost
+
+When the face is absent (no detection), a break timer starts immediately. Three thresholds govern what happens:
+
+### Absence tiers
+
+| Duration | Behaviour |
+|---|---|
+| < 1 min (`BREAK_MIN_DURATION_MS`) | Ignored — stood up briefly, sneezed, etc. No boost on return. |
+| 1–60 min | **Break mode.** Active session timer pauses. On return, active time is partially reduced (boost applied). |
+| ≥ 60 min (`BREAK_SESSION_END_MS`) | Session auto-ends — user has walked away for the day. |
+
+### Break boost on return
+
+When the user returns from a qualifying break (≥ 1 min, < 60 min), `#activeSessionSec` is reduced proportionally to how much of the ultradian cycle they stepped away from:
+
+- **Short break (1–10 min)**: linear partial reset — 1 min away reduces active time by 1/10th of the full-reset amount, 9 min by 9/10ths.
+- **Full break (≥ 10 min, `BREAK_FULL_RESET_MS`)**: active session time resets to zero — the ultradian decay clock restarts from scratch.
+
+A "Focus boost +X%" insight fires immediately on return, quantifying how much the decay factor improved. The boost is proportional: a longer break earns a larger score recovery.
+
+### UI states
+
+While away, the tray icon switches from the live score to a gray `–`. After 1 minute, it switches to a blue `BRK` indicator. A break banner appears in the dashboard showing elapsed away time. On return, the banner disappears and the tray icon resumes showing the live score.
 
 ---
 
@@ -328,8 +355,11 @@ Internal `rawScore` ∈ [0, 100]. UI `score` is a rounded EMA:
 | `PERCLOS_WINDOW` | Length of binary closed-eye history |
 | `ENERGY_PERCLOS_GRACE` | PERCLOS fraction below which energy score is unaffected (0.03) |
 | `EYE_COMFORT_BASELINE_BPM` | Target blink rate (15 BPM); deficit drives eye comfort decay |
-| `SESSION_DECAY_TAU_MIN` | Ultradian decay time constant (540 min = 9 h) |
+| `SESSION_DECAY_TAU_MIN` | Ultradian decay time constant (200 min — steepest at 90-min cycle boundary) |
 | `SESSION_DECAY_BETA` | Decay shape exponent (2 = Gaussian) |
+| `BREAK_MIN_DURATION_MS` | Minimum absence to count as a break and trigger boost (1 min) |
+| `BREAK_FULL_RESET_MS` | Absence length that fully resets active session decay (10 min) |
+| `BREAK_SESSION_END_MS` | Absence length that auto-ends the session (60 min) |
 
 ---
 
@@ -388,11 +418,46 @@ The three subscore labels in the stats panel (**Screen Strain**, **Engagement**,
 
 Implemented as CSS-only `.info-tip` / `.info-tip-bubble` classes. No JS changes required.
 
+### Tray icon
+
+The macOS / Windows menu-bar icon is a **64×64 canvas** drawn in the renderer and sent to the main process as a PNG data URL via the `tray-icon` IPC channel. Three visual states:
+
+| State | Icon | Color |
+|---|---|---|
+| Active (score ≥ 80) | Score number | Green |
+| Active (score 50–79) | Score number | Yellow |
+| Active (score < 50) | Score number | Red |
+| Away (< 1 min) | `–` | Gray |
+| Break (≥ 1 min) | `BRK` | Blue |
+
+Font size auto-shrinks so text always fits within the icon regardless of number of digits or label length.
+
+### Advanced stats panel
+
+The expanded stats view includes a **T yaw** row showing accumulated side-gaze seconds (suppressed and displayed as zero on multi-monitor setups), and a **monitor count** flag that lights up when multiple displays are detected.
+
 ### Update flow
 
 A dismissable **update banner** appears above the footer whenever a new version has been downloaded and is ready to install. It shows the version number and a "Restart" button — no need to spot the small footer text.
 
 The footer "Check for updates" button still works for manual checks; its label reflects the current download state (checking / downloading / ready).
+
+---
+
+## App icons (`assets/`)
+
+Platform-specific icon assets live in `assets/macOS/` and `assets/windows/`. Both platforms ship light and dark variants:
+
+| File | Used for |
+|---|---|
+| `assets/macOS/icon-dark.icns` | macOS app icon (dark variant), also used as the DMG window icon |
+| `assets/macOS/icon-light.icns` | macOS app icon (light variant) |
+| `assets/macOS/icon-dark-dock.png` | macOS Dock icon (dark) |
+| `assets/macOS/icon-light-dock.png` | macOS Dock icon (light) |
+| `assets/windows/icon-dark.ico` | Windows taskbar / installer icon (dark) |
+| `assets/windows/icon-light.ico` | Windows taskbar / installer icon (light) |
+
+`electron-builder.yml` references `assets/macOS/lobi.icon` (the `.icon` bundle) for the macOS build and `assets/windows/icon-dark.ico` for Windows.
 
 ---
 
@@ -415,6 +480,33 @@ The footer "Check for updates" button still works for manual checks; its label r
 
 ---
 
+## Automated tests
+
+The scoring engine has a **Vitest** test suite (`src/insights.test.js`) covering:
+
+- Calibration gate (scoring holds until N stable frames)
+- Face-absent / away detection
+- Insight cooldown and escalating cooldown
+- Score threshold and tier classification
+- Insight escalation (slipping → break escalation path)
+- Recovery insight (bad → good comeback)
+- Flow milestones (20 min and 60 min sustained ≥ 80)
+- No-repeat body rotation (deck exhausts before repeating)
+- Insight payload shape (non-empty title + body)
+- Ultradian decay (math verification + engine integration)
+- Break boost (11 tests: boost magnitude, isOnBreak getter, partial vs full reset, session-end trigger)
+- Multi-monitor T_yaw suppression (7 tests)
+
+Run with:
+
+```sh
+npx vitest run
+```
+
+Requires Node 22.x. Pinned to `vitest@2` for Node 22.0.0 compatibility (v4 requires ≥22.12).
+
+---
+
 ## How to test (manual)
 
 1. Run the app, grant camera, open the dashboard.
@@ -423,7 +515,9 @@ The footer "Check for updates" button still works for manual checks; its label r
 4. **Yaw distraction** (single monitor only): Turn head sideways past ~20° and hold — `T_yaw` accumulates and engagement drops. On a multi-monitor setup this should have no effect.
 5. **Energy**: Partially close eyes — `perclos` rises and energy score drops (now responsive from ~3% closure rather than 8%).
 6. **Eye comfort**: Avoid blinking for 30–60 s — eye comfort score should visibly decay as smoothed BPM falls below 15.
-7. **Session decay**: Check `activeSessionMin` in `getLiveMetrics()` — decay factor is negligible for the first hour, then gradually steepens.
-8. **Motion gate**: Rapidly move head/eyes — `concentrationFrameTrusted` false should pause score ticks.
-9. **Update banner**: In a packaged build, trigger an update download and reopen the dashboard — the banner should appear immediately without needing to click anything.
-10. **Tray update states**: After triggering an update check, right-click the tray icon — the menu item label should reflect the current download state in real time.
+7. **Session decay**: Check `activeSessionMin` in `getLiveMetrics()` — decay is ~4% at 45 min and ~16% at 90 min.
+8. **Break mode**: Step away from the camera. After ~10 s, the tray should show `–`. After 1 min, it should switch to blue `BRK` and the dashboard banner should appear. Return — a "Focus boost +X%" insight should fire and the banner should disappear.
+9. **Session auto-end**: Stay out of frame for 60 min — the session should end automatically.
+10. **Motion gate**: Rapidly move head/eyes — `concentrationFrameTrusted` false should pause score ticks.
+11. **Update banner**: In a packaged build, trigger an update download and reopen the dashboard — the banner should appear immediately without needing to click anything.
+12. **Tray update states**: After triggering an update check, right-click the tray icon — the menu item label should reflect the current download state in real time.

@@ -5,6 +5,8 @@
   "author": "Wind Down Studio, LLC",
   "main": "src/main.js",
   "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
     "start": "electron .",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
@@ -16,7 +18,8 @@
   "devDependencies": {
     "@electron/notarize": "^3.1.1",
     "electron": "^28.0.0",
-    "electron-builder": "^24.0.0"
+    "electron-builder": "^24.0.0",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "electron-updater": "^6.8.3"

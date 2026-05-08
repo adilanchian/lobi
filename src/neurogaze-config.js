@@ -228,8 +228,16 @@ export const T_YAW_DECAY_PER_SEC  = 1.5
 
 // ── Ultradian session decay ───────────────────────────────────────────────────
 // decayFactor = exp( -(activeMinutes / TAU)^BETA )
-// BETA = 2 gives a Gaussian (slow start, accelerating drop) that maps naturally
-// onto 90-min ultradian cycles: −3% at 90 min, −10% at 180 min, −22% at 270 min.
-// TAU is set to one full biological work day (9 h) so the first cycle stays near 1.
-export const SESSION_DECAY_TAU_MIN = 540
+// BETA = 2 gives a Gaussian shape: slow start, then steepening drop.
+// TAU = 120 min aligns the steepest part of the curve with the 90-min ultradian
+// cycle boundary: −4% at 45 min, −16% at 90 min, −28% at 120 min, −56% at 180 min.
+export const SESSION_DECAY_TAU_MIN = 200
 export const SESSION_DECAY_BETA    = 2
+
+// ── Break / absence detection ────────────────────────────────────────────────
+// Absences ≤ this are ignored (stood up briefly, sneezed, etc.)
+export const BREAK_MIN_DURATION_MS  = 60_000        // 1 min
+// Absences ≥ this trigger a full reset of the active-session decay timer.
+export const BREAK_FULL_RESET_MS    = 10 * 60_000   // 10 min
+// Absences ≥ this auto-end the session (user walked away for the day).
+export const BREAK_SESSION_END_MS   = 60 * 60_000   // 60 min

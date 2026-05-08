@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('lobi', {
   // Update the menu-bar tray label with the current focus status
   updateTrayStatus: (status) => ipcRenderer.send('tray-status', status),
 
+  // Update the macOS menu bar text next to the tray icon (no-op on Windows/Linux)
+  updateTrayTitle: (title) => ipcRenderer.send('tray-title', title),
+
   // Hide the current window back to the tray
   hideWindow: () => ipcRenderer.send('hide-window'),
 

@@ -406,6 +406,10 @@
           <span class="stat-name">T look</span><span class="stat-val" id="stat-tlook-num">—</span>
           <div class="stat-track"><div class="stat-fill" id="stat-tlook-fill"></div></div>
         </div>
+        <div class="stat-row" title="Seconds sustained side-gaze (single-monitor only; suppressed on multi-monitor)">
+          <span class="stat-name">T yaw</span><span class="stat-val" id="stat-tyaw-num">—</span>
+          <div class="stat-track"><div class="stat-fill" id="stat-tyaw-fill"></div></div>
+        </div>
         <div class="stat-row" title="PERCLOS proxy (eyes closed fraction)">
           <span class="stat-name">PERC</span><span class="stat-val" id="stat-perc-num">—</span>
           <div class="stat-track"><div class="stat-fill" id="stat-perc-fill"></div></div>
@@ -418,6 +422,7 @@
           <span class="stat-flag off" id="stat-flag-geom">Geometry</span>
           <span class="stat-flag off" id="stat-flag-trust">Trusted</span>
           <span class="stat-flag off" id="stat-flag-chin">Chin dn</span>
+          <span class="stat-flag off" id="stat-flag-monitors">1 monitor</span>
         </div>
         </div> <!-- /stats-advanced -->
       </div>
@@ -458,6 +463,20 @@
         style="background:none; border:none; color:var(--muted); font-size:14px; cursor:pointer; padding:0; line-height:1; font-family:inherit;">
         ✕
       </button>
+    </div>
+  </div>
+
+  <!-- ── Break mode banner (shown after 1+ min away) ──────────────────────── -->
+  <div id="break-banner" style="display:none; align-items:center; justify-content:space-between; gap:8px;
+    background:color-mix(in srgb, #60a5fa 12%, var(--surface));
+    border:1px solid color-mix(in srgb, #60a5fa 35%, transparent);
+    border-radius:8px; padding:8px 12px; margin-bottom:8px;">
+    <div style="display:flex; align-items:center; gap:6px;">
+      <span style="font-size:14px;">☕</span>
+      <div style="display:flex; flex-direction:column; gap:1px;">
+        <span style="font-size:12px; color:var(--text); font-weight:600;">Break mode</span>
+        <span id="break-banner-time" style="font-size:11px; color:#93c5fd;">0m away — come back when you're ready</span>
+      </div>
     </div>
   </div>
 
@@ -642,6 +661,9 @@
     const tlook = live.tLook ?? 0
     setStatBar('stat-tlook-fill', 'stat-tlook-num', Math.min(1, tlook / 40), `${tlook.toFixed(1)}s`, null)
 
+    const tyaw = live.tYaw ?? 0
+    setStatBar('stat-tyaw-fill', 'stat-tyaw-num', Math.min(1, tyaw / 30), `${tyaw.toFixed(1)}s`, null)
+
     const pc = live.perclos ?? 0
     setStatBar('stat-perc-fill', 'stat-perc-num', pc, `${(pc * 100).toFixed(0)}%`, 'perc')
 
@@ -652,6 +674,11 @@
     setFlag('stat-flag-geom', !!(fp && data.geometryReliable))
     setFlag('stat-flag-trust', !!data.concentrationFrameTrusted)
     setFlag('stat-flag-chin', !!data.chinDown)
+    const monEl = document.getElementById('stat-flag-monitors')
+    if (monEl) {
+      monEl.textContent = displayCount === 1 ? '1 monitor' : `${displayCount} monitors`
+      setFlag('stat-flag-monitors', displayCount > 1)
+    }
   }
 
   // Currently selected webcam deviceId (null = OS default). Persisted across
@@ -661,31 +688,61 @@
   // ── Tray icon — score number drawn on a canvas, sent to main as PNG ───────
   let lastTrayScore = -1
   const trayCanvas  = document.createElement('canvas')
-  trayCanvas.width  = 36   // 18px effective at @2x Retina
-  trayCanvas.height = 36
+  const TRAY_PX     = 64   // logical size; @2x Retina renders at 32pt
+  trayCanvas.width  = TRAY_PX
+  trayCanvas.height = TRAY_PX
   const trayCtx = trayCanvas.getContext('2d')
 
+  // score = number | 'away' | 'break' | null
   function updateTrayIcon(score) {
     if (score === lastTrayScore) return
     lastTrayScore = score
 
-    const idle = score == null
-    const hex  = idle ? '#6b7280' : score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171'
-    const text = idle ? '–' : String(score)
+    let hex, text
+    if (score === 'break') {
+      hex = '#60a5fa'; text = 'BRK'
+    } else if (score === 'away' || score == null) {
+      hex = '#6b7280'; text = '–'
+    } else {
+      hex  = score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171'
+      text = String(score)
+    }
 
-    trayCtx.clearRect(0, 0, 36, 36)
-    trayCtx.fillStyle  = hex
-    trayCtx.font       = `700 ${text.length > 2 ? 18 : 22}px -apple-system, sans-serif`
-    trayCtx.textAlign  = 'center'
+    // Pick font size, then shrink until the text fits within the canvas width
+    let fontSize = text.length > 2 ? 16 : 20
+    trayCtx.font = `700 ${fontSize}px -apple-system, sans-serif`
+    while (trayCtx.measureText(text).width > TRAY_PX - 8 && fontSize > 8) {
+      fontSize -= 1
+      trayCtx.font = `700 ${fontSize}px -apple-system, sans-serif`
+    }
+
+    trayCtx.clearRect(0, 0, TRAY_PX, TRAY_PX)
+    trayCtx.fillStyle    = hex
+    trayCtx.textAlign    = 'center'
     trayCtx.textBaseline = 'middle'
-    trayCtx.fillText(text, 18, 19)
+    trayCtx.fillText(text, TRAY_PX / 2, TRAY_PX / 2)
 
     window.lobi?.updateTrayIcon(trayCanvas.toDataURL('image/png'))
+  }
+
+  const breakBanner     = document.getElementById('break-banner')
+  const breakBannerTime = document.getElementById('break-banner-time')
+
+  function fmtBreakDuration(ms) {
+    const totalSec = Math.floor(ms / 1000)
+    const m = Math.floor(totalSec / 60)
+    const s = totalSec % 60
+    if (m === 0) return `${s}s away — come back when you're ready`
+    return `${m}m ${s}s away — come back when you're ready`
   }
 
   // ── Main update — called ~15x/sec ─────────────────────────────────────────
   function onTrackingUpdate(data) {
     engine.update({ ...data, hasMultipleMonitors: displayCount > 1 })
+
+    const onBreak = engine.isOnBreak
+    breakBanner.style.display = (sessionRunning && onBreak) ? 'flex' : 'none'
+    if (onBreak) breakBannerTime.textContent = fmtBreakDuration(engine.breakDurationMs)
 
     const score  = engine.score
     const colour = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--yellow)' : 'var(--red)'
@@ -706,8 +763,19 @@
     // Enable "End Session" the moment calibration finishes
     if (sessionRunning) setSessionBtnEnabled(!engine.isCalibrating)
 
-    updateTrayIcon(score)
-    window.lobi?.updateTrayStatus(engine.status)
+    const faceGone = !data.facePresent
+
+    if (onBreak) {
+      updateTrayIcon('break')
+      window.lobi?.updateTrayStatus('BREAK')
+    } else if (faceGone) {
+      updateTrayIcon('away')
+      window.lobi?.updateTrayStatus('AWAY')
+    } else {
+      updateTrayIcon(score)
+      window.lobi?.updateTrayStatus(engine.status)
+    }
+    window.lobi?.updateTrayTitle('')
 
     renderLiveStats(data)
   }
@@ -893,6 +961,11 @@
   }
 
   window.addEventListener('lobi-insight', refreshInsights)
+
+  // Auto-end session when user has been away for 60+ minutes
+  window.addEventListener('lobi-session-end', () => {
+    if (sessionRunning) endSession()
+  })
 
   // ── Boot ──────────────────────────────────────────────────────────────────
   async function start() {

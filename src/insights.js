@@ -45,6 +45,9 @@ import {
   YAWN_LIP_THRESHOLD,
   SESSION_DECAY_TAU_MIN,
   SESSION_DECAY_BETA,
+  BREAK_MIN_DURATION_MS,
+  BREAK_FULL_RESET_MS,
+  BREAK_SESSION_END_MS,
   ENERGY_PERCLOS_GRACE,
   T_YAW_ONSET_NORM,
   T_YAW_IGNORE_SEC,
@@ -207,6 +210,7 @@ export class InsightEngine {
   #bodyDecks = new Map()  // key → { queue: string[], lastShown: string | null }
   #sessionStart = Date.now()
   #lastUpdateTs = 0
+  #breakStartTs = null   // set when face first goes absent; null when present
   #scoreSum = 0
   #scoreCount = 0
   #peakScore = 0
@@ -243,6 +247,18 @@ export class InsightEngine {
 
   get isCalibrating() {
     return !this.#calibrated
+  }
+
+  /** True when the user has been absent long enough to show break-mode UI (> 1 min). */
+  get isOnBreak() {
+    if (!this.#breakStartTs) return false
+    return Date.now() - this.#breakStartTs >= BREAK_MIN_DURATION_MS
+  }
+
+  /** Milliseconds the user has been continuously absent (0 when present). */
+  get breakDurationMs() {
+    if (!this.#breakStartTs) return 0
+    return Date.now() - this.#breakStartTs
   }
 
   /** Snapshot for live dashboard bars (call after `update`). */
@@ -331,9 +347,32 @@ export class InsightEngine {
       this.#tLook = 0
       this.#tYaw = 0
       this.#resetEyeComfort()
-      this.status = this.#calibrated ? 'Away' : 'Waiting for face...'
+
+      if (!this.#breakStartTs) this.#breakStartTs = now
+
+      const absentMs = now - this.#breakStartTs
+      if (absentMs >= BREAK_SESSION_END_MS) {
+        this.#breakStartTs = null
+        window.dispatchEvent(new CustomEvent('lobi-session-end'))
+        this.status = 'Session ended'
+        this.#pushDisplay()
+        return this.score
+      }
+
+      this.status = this.#calibrated
+        ? (absentMs >= BREAK_MIN_DURATION_MS ? 'On Break' : 'Away')
+        : 'Waiting for face...'
       this.#pushDisplay()
       return this.score
+    }
+
+    // Face just returned — handle break boost if the absence was long enough
+    if (this.#breakStartTs !== null) {
+      const breakMs = now - this.#breakStartTs
+      this.#breakStartTs = null
+      if (this.#calibrated && breakMs >= BREAK_MIN_DURATION_MS) {
+        this.#applyBreakBoost(breakMs, now)
+      }
     }
 
     if (!geometryReliable) {
@@ -452,6 +491,39 @@ export class InsightEngine {
 
     this.#maybeFireInsight(now)
     return this.score
+  }
+
+  #applyBreakBoost(breakMs, now) {
+    const breakMin = breakMs / 60_000
+    const oldActiveSec = this.#activeSessionSec
+
+    if (breakMs >= BREAK_FULL_RESET_MS) {
+      this.#activeSessionSec = 0
+    } else {
+      // Linear reduction: 0% at BREAK_MIN, 100% at BREAK_FULL_RESET
+      const minMs = BREAK_MIN_DURATION_MS
+      const ratio = (breakMs - minMs) / (BREAK_FULL_RESET_MS - minMs)
+      this.#activeSessionSec = oldActiveSec * (1 - ratio)
+    }
+
+    const tau = SESSION_DECAY_TAU_MIN
+    const beta = SESSION_DECAY_BETA
+    const oldDecay = Math.exp(-Math.pow(oldActiveSec / 60 / tau, beta))
+    const newDecay = Math.exp(-Math.pow(this.#activeSessionSec / 60 / tau, beta))
+    const boostPct = Math.round((newDecay - oldDecay) * 100)
+
+    if (boostPct > 0) {
+      const minsLabel = Math.round(breakMin)
+      const insight = {
+        title: `+${boostPct}% focus boost`,
+        body: `Taking a ${minsLabel}-minute break reset your fatigue timer. Your brain is fresher than it was.`,
+      }
+      this.#lastNotifyTs = now
+      this.recentInsights.unshift({ ...insight, time: new Date().toLocaleTimeString() })
+      if (this.recentInsights.length > 5) this.recentInsights.pop()
+      window.lobi?.sendInsight(insight.title, insight.body)
+      window.dispatchEvent(new CustomEvent('lobi-insight', { detail: insight }))
+    }
   }
 
   #pushPerclos(ear) {

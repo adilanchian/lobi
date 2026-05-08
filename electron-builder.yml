@@ -13,7 +13,7 @@ files:
 # ── macOS ────────────────────────────────────────────────────────────────────
 mac:
   category: public.app-category.productivity
-  icon: assets/icon.icns
+  icon: assets/macOS/lobi.icon
 
   identity: "Wind Down Studio, LLC (UWMZP3Q26H)"
   hardenedRuntime: true
@@ -22,9 +22,8 @@ mac:
   entitlements: assets/entitlements.mac.plist
   entitlementsInherit: assets/entitlements.mac.plist
 
-  # Built-in notarization — reads APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD from env
-  notarize:
-    teamId: "UWMZP3Q26H"
+  # Built-in notarization reads APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID from env.
+  notarize: true
 
   # Shown in macOS permission dialogs
   extendInfo:
@@ -39,6 +38,7 @@ mac:
 
 dmg:
   title: "Lobi"
+  icon: assets/macOS/icon-dark.icns
   contents:
     - x: 130
       y: 220
@@ -57,7 +57,7 @@ publish:
 
 # ── Windows ───────────────────────────────────────────────────────────────────
 win:
-  icon: assets/icon.ico
+  icon: assets/windows/icon-dark.ico
   target:
     - target: nsis   # handles auto-updates natively, generates latest.yml
       arch: x64      # covers all Windows 10+ desktops/laptops

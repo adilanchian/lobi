@@ -674,3 +674,114 @@ describe('break boost', () => {
     expect(sessionEndEvents).toHaveLength(0)
   })
 })
+
+// ── 12. Multi-monitor detection ───────────────────────────────────────────────
+//
+// When hasMultipleMonitors=true:
+//   - T_yaw must never accumulate (user is legitimately looking at another screen)
+//   - yawBad must be 0 in score components (no engagement penalty)
+//   - T_yaw that built up on single-monitor must actively decay when monitors switch
+//
+// When hasMultipleMonitors=false (default):
+//   - T_yaw accumulates after the T_YAW_IGNORE_SEC (2s) grace period
+//   - Sustained high yaw drives engagement score down
+
+import { T_YAW_ONSET_NORM, T_YAW_IGNORE_SEC } from './neurogaze-config.js'
+
+const HIGH_YAW_FRAME = {
+  ...GOOD_FRAME,
+  yawSmoothed: T_YAW_ONSET_NORM + 0.1,  // clearly past the onset threshold
+}
+
+describe('multi-monitor — T_yaw suppression', () => {
+  it('T_yaw does not accumulate on a multi-monitor setup', () => {
+    const engine = new InsightEngine()
+    calibrate(engine)
+
+    // Feed sustained high-yaw frames as if looking at a second monitor
+    feedFrames(engine, { ...HIGH_YAW_FRAME, hasMultipleMonitors: true }, 300)
+
+    expect(engine.getLiveMetrics().tYaw).toBe(0)
+  })
+
+  it('T_yaw accumulates on a single-monitor setup after the grace period', () => {
+    const engine = new InsightEngine()
+    calibrate(engine)
+
+    // Feed past the T_YAW_IGNORE_SEC grace window
+    const gracePlusFrames = Math.round((T_YAW_IGNORE_SEC + 5) * 1000 / 67)
+    feedFrames(engine, { ...HIGH_YAW_FRAME, hasMultipleMonitors: false }, gracePlusFrames)
+
+    expect(engine.getLiveMetrics().tYaw).toBeGreaterThan(0)
+  })
+
+  it('T_yaw that built up on single-monitor decays when multi-monitor is detected', () => {
+    const engine = new InsightEngine()
+    calibrate(engine)
+
+    // Build up T_yaw on single monitor
+    const gracePlusFrames = Math.round((T_YAW_IGNORE_SEC + 10) * 1000 / 67)
+    feedFrames(engine, { ...HIGH_YAW_FRAME, hasMultipleMonitors: false }, gracePlusFrames)
+    const tYawBefore = engine.getLiveMetrics().tYaw
+    expect(tYawBefore).toBeGreaterThan(0)
+
+    // Plug in a second monitor — T_yaw should decay to 0
+    feedFrames(engine, { ...HIGH_YAW_FRAME, hasMultipleMonitors: true }, 300)
+
+    expect(engine.getLiveMetrics().tYaw).toBe(0)
+  })
+
+  it('high yaw causes no engagement penalty on multi-monitor', () => {
+    const engine = new InsightEngine()
+    calibrate(engine)
+
+    // Long sustained yaw on multi-monitor — score should stay near 100
+    // Include blinks to prevent eyeComfort decay from confounding the yaw signal
+    feedFrames(engine, { ...HIGH_YAW_FRAME, blinkJustCompleted: true, hasMultipleMonitors: true }, 1000)
+
+    // Score must not have dropped from yaw alone (eyeComfort may drift slightly)
+    expect(engine.score).toBeGreaterThan(85)
+  })
+
+  it('same high yaw causes engagement penalty on single-monitor', () => {
+    const engine = new InsightEngine()
+    calibrate(engine)
+
+    // Long sustained yaw on single-monitor — score should drop
+    feedFrames(engine, { ...HIGH_YAW_FRAME, hasMultipleMonitors: false }, 1000)
+
+    expect(engine.score).toBeLessThan(95)
+  })
+
+  it('chinDown does not accumulate T_off when yaw is above HEAD_YAW_MAX_FOR_CHIN_DOWN', () => {
+    // This is enforced in the tracker (chinDown=false at high yaw), but we can
+    // verify the engine respects it: passing chinDown=false with high yaw should
+    // not accumulate T_off regardless of pitch.
+    const engine = new InsightEngine()
+    calibrate(engine)
+
+    feedFrames(engine, {
+      ...GOOD_FRAME,
+      chinDown: false,           // tracker would set this false at high yaw
+      pitchSmoothed: 0.28,       // pitch is high but chinDown gate is closed
+      yawSmoothed: 0.5,
+      hasMultipleMonitors: false,
+    }, 300)
+
+    expect(engine.getLiveMetrics().tOff).toBe(0)
+  })
+
+  it('hasMultipleMonitors flag is respected frame-by-frame (no stale state)', () => {
+    const engine = new InsightEngine()
+    calibrate(engine)
+
+    // Alternate between single and multi monitor
+    for (let i = 0; i < 10; i++) {
+      feedFrames(engine, { ...HIGH_YAW_FRAME, hasMultipleMonitors: false }, 30)
+      feedFrames(engine, { ...HIGH_YAW_FRAME, hasMultipleMonitors: true }, 30)
+    }
+
+    // After ending on multi-monitor, T_yaw should be 0
+    expect(engine.getLiveMetrics().tYaw).toBe(0)
+  })
+})

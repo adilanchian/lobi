@@ -13,7 +13,9 @@ files:
 # ── macOS ────────────────────────────────────────────────────────────────────
 mac:
   category: public.app-category.productivity
-  icon: assets/icon.icns
+  icon:
+    - assets/macOS/icon-dark.icns    # macOS 25 and earlier
+    - assets/macOS/lobi.icon         # macOS 26+ (Liquid Glass, compiled via actool)
 
   identity: "Wind Down Studio, LLC (UWMZP3Q26H)"
   hardenedRuntime: true
@@ -57,7 +59,7 @@ publish:
 
 # ── Windows ───────────────────────────────────────────────────────────────────
 win:
-  icon: assets/icon.ico
+  icon: assets/windows/icon-dark.ico
   target:
     - target: nsis   # handles auto-updates natively, generates latest.yml
       arch: x64      # covers all Windows 10+ desktops/laptops

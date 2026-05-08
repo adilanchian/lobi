@@ -709,9 +709,9 @@
     }
 
     // Pick font size, then shrink until the text fits within the canvas width
-    let fontSize = text.length > 2 ? 28 : 38
+    let fontSize = text.length > 2 ? 16 : 20
     trayCtx.font = `700 ${fontSize}px -apple-system, sans-serif`
-    while (trayCtx.measureText(text).width > TRAY_PX - 4 && fontSize > 10) {
+    while (trayCtx.measureText(text).width > TRAY_PX - 8 && fontSize > 8) {
       fontSize -= 1
       trayCtx.font = `700 ${fontSize}px -apple-system, sans-serif`
     }

@@ -12,6 +12,7 @@ const {
   session,
   systemPreferences,
   screen,
+  nativeTheme,
 } = require("electron");
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
@@ -215,6 +216,17 @@ function rebuildTrayMenu() {
   if (tray) buildTrayMenu();
 }
 
+function updateDockIcon() {
+  const dark = nativeTheme.shouldUseDarkColors;
+  if (process.platform === "darwin") {
+    const iconPath = path.join(__dirname, "..", "assets", "macOS", `${dark ? "icon-dark" : "icon-light"}-dock.png`);
+    app.dock.setIcon(iconPath);
+  } else if (process.platform === "win32") {
+    const iconPath = path.join(__dirname, "..", "assets", "windows", `${dark ? "icon-dark" : "icon-light"}.ico`);
+    for (const win of BrowserWindow.getAllWindows()) win.setIcon(iconPath);
+  }
+}
+
 function setupTray() {
   // Start with an empty icon — the dashboard will push a live score image once tracking starts
   tray = new Tray(nativeImage.createEmpty());
@@ -374,6 +386,8 @@ app.whenReady().then(() => {
   notificationsEnabled = settings.notificationsEnabled !== false;
 
   setupTray();
+  updateDockIcon();
+  nativeTheme.on("updated", updateDockIcon);
   settings.onboardingDone ? openDashboard() : openOnboarding();
 
   // ── Auto-update ─────────────────────────────────────────────────────────────

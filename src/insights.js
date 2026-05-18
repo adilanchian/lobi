@@ -1,5 +1,5 @@
-// insights.js — Focus score (0–100) from neurogaze.txt: T_off / T_roll tiers, f(P)·g(T_off),
-// rollSeverity·gRoll(T_roll), EyeGate (PERCLOS proxy); composite bad → score, warmup scale, display EMA.
+// insights.js — Internal focus model from neurogaze.txt: T_off / T_roll tiers, f(P)·g(T_off),
+// rollSeverity·gRoll(T_roll), EyeGate (PERCLOS proxy); composite bad → fried-flow state via display EMA.
 
 import {
   CALIBRATION_FRAMES,
@@ -67,6 +67,57 @@ function shuffle(arr) {
     [a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+const INTERVENTION_COPY = {
+  water: {
+    slipping: 'Drink a full glass of water right now. Even mild dehydration can make Steady feel weirdly out of reach.',
+    break: 'Step away and refill your water. Finish the glass before you sit back down.',
+  },
+  walk: {
+    slipping: 'Take a short walk, even just around the room. Movement is one of the fastest ways back to Steady.',
+    break: 'Take a real walk for 5-10 minutes. Leave the screen behind and let your attention reset.',
+  },
+  outside: {
+    slipping: 'Step outside or look out a window for a minute. Natural light and distance give your attention a clean reset.',
+    break: 'Go outside for a few minutes if you can. The change of scene does more work than staying put and pushing.',
+  },
+  coffee: {
+    slipping: 'Make coffee or tea and let the little ritual slow you down. Come back when your brain feels less scattered.',
+    break: 'Take a coffee or tea break away from the screen. Sip it somewhere that is not your desk.',
+  },
+  snack: {
+    slipping: 'Grab a small snack, ideally something with protein or fiber. Low fuel can masquerade as low focus.',
+    break: 'Take a snack break. Eat away from the screen for a few minutes before you come back.',
+  },
+  stretch: {
+    slipping: 'Stand up and stretch your neck, shoulders, and wrists for 60 seconds. Give your posture a reset.',
+    break: 'Do a two-minute stretch: shoulders, back, hips, wrists. Then come back and restart clean.',
+  },
+  breathing: {
+    slipping: 'Take five slow breaths with a longer exhale than inhale. It nudges your nervous system out of scramble mode.',
+    break: 'Step away and do one minute of slow breathing. Long exhales first, then return.',
+  },
+  eyeRest: {
+    slipping: 'Look at something far away for 20 seconds, then blink on purpose. Your eyes are part of the focus system.',
+    break: 'Give your eyes two screen-free minutes. Look far away, then close them for a few breaths.',
+  },
+  noScreen: {
+    slipping: 'Put your phone face-down and close the extra tab pile. Less input gives Steady a fighting chance.',
+    break: 'Take a no-screen break. No phone, no scroll, just two quiet minutes away from the desk.',
+  },
+  music: {
+    slipping: 'Switch to one low-friction song or a familiar focus playlist. Make the next few minutes easier to enter.',
+    break: 'Play one calming song away from the screen. Let it mark a real reset, then come back.',
+  },
+  tidy: {
+    slipping: 'Clear one tiny thing from your desk. A small physical reset can make the next task feel less noisy.',
+    break: 'Take two minutes to tidy your desk or workspace. Keep it physical and simple.',
+  },
+  nap: {
+    slipping: 'If you are genuinely sleepy, plan a real rest soon. Fighting heavy eyelids rarely pays off.',
+    break: 'If you can, take a 10-20 minute nap. For real fatigue, rest beats grinding.',
+  },
 }
 
 const NOTIFY_COOLDOWN_MS = 5 * 60 * 1000
@@ -202,6 +253,7 @@ export class InsightEngine {
   score = 100
   status = 'Starting up...'
   recentInsights = []
+  interventionPreferences = []
 
   #lastNotifyTs = 0
   #highScoreSince = null   // timestamp when score first reached ≥ 80; null when below
@@ -247,6 +299,20 @@ export class InsightEngine {
 
   get isCalibrating() {
     return !this.#calibrated
+  }
+
+  get flowState() {
+    return InsightEngine.flowStateForScore(this.score)
+  }
+
+  setInterventionPreferences(preferences = []) {
+    this.interventionPreferences = preferences.filter(id => INTERVENTION_COPY[id])
+  }
+
+  static flowStateForScore(score) {
+    if (score >= 80) return 'Locked In'
+    if (score >= 50) return 'Steady'
+    return 'Fried'
   }
 
   /** True when the user has been absent long enough to show break-mode UI (> 1 min). */
@@ -470,11 +536,7 @@ export class InsightEngine {
     this.#pushDisplay()
 
     if (this.isCalibrating) this.status = 'Calibrating...'
-    else if (this.score >= 80) this.status = 'Locked In'
-    else if (this.score >= 65) this.status = 'Focused'
-    else if (this.score >= 50) this.status = 'Drifting'
-    else if (this.score >= 35) this.status = 'Low Focus'
-    else this.status = 'Need a Break'
+    else this.status = this.flowState
 
     if (this.score >= 80) {
       if (!this.#highScoreSince) this.#highScoreSince = now
@@ -676,6 +738,10 @@ export class InsightEngine {
       avgScore:
         this.#scoreCount > 0 ? Math.round(this.#scoreSum / this.#scoreCount) : 0,
       peakScore: this.#peakScore,
+      avgFlowState: InsightEngine.flowStateForScore(
+        this.#scoreCount > 0 ? Math.round(this.#scoreSum / this.#scoreCount) : 0,
+      ),
+      peakFlowState: InsightEngine.flowStateForScore(this.#peakScore),
       insightCount: this.recentInsights.length,
     }
   }
@@ -695,6 +761,17 @@ export class InsightEngine {
     const body = deck.queue.pop()
     deck.lastShown = body
     return body
+  }
+
+  #preferredBodies(kind) {
+    return this.interventionPreferences
+      .map(id => INTERVENTION_COPY[id]?.[kind])
+      .filter(Boolean)
+  }
+
+  #pickInterventionBody(key, kind, fallbackOptions) {
+    const preferred = this.#preferredBodies(kind)
+    return this.#pickBody(key, preferred.length ? preferred : fallbackOptions)
   }
 
   #scoreTier(s) {
@@ -786,7 +863,7 @@ export class InsightEngine {
         title: 'Back in it',
         body: this.#pickBody('recovery', [
           'Solid recovery — whatever you just did, it worked. Keep that in your toolkit.',
-          "Score's back up after that dip. Good to see you back in the zone.",
+          "You're back to Steady after that dip. Good to see you back in the zone.",
           "That's a proper comeback. You're back on track — nice work.",
           'You pulled it back. That kind of reset is what keeps long sessions productive.',
         ]),
@@ -806,7 +883,7 @@ export class InsightEngine {
       if (isEscalation) {
         return {
           title: 'Things slipped further',
-          body: this.#pickBody('break-escalation', [
+          body: this.#pickInterventionBody('break-escalation', 'break', [
             "It dropped further since the last nudge. The fastest way back is physical — stand up, walk around for two minutes, then return. Movement works better than willpower here.",
             "Gone from drifting to a real dip. Splashing cold water on your face or wrists triggers a reflex that slows your heart rate and brings focus back. Worth trying before a longer break.",
             "The slide continued. A 10-minute break raises your baseline back to where it needs to be — staying put and grinding through it usually makes the next hour worse, not better.",
@@ -816,7 +893,7 @@ export class InsightEngine {
       if (depth === 1) {
         return {
           title: 'Time for a break',
-          body: this.#pickBody('break-1', [
+          body: this.#pickInterventionBody('break-1', 'break', [
             'Get up and move for 2 minutes — even light movement raises the chemicals your brain needs to refocus. Walking to refill your water counts.',
             'Look at something far away for 20 seconds, then close your eyes for 30. This clears the visual processing load your brain has been carrying.',
             'Take 5 breaths where your exhale is twice as long as your inhale. It activates your parasympathetic system and resets your mental baseline quickly.',
@@ -828,16 +905,16 @@ export class InsightEngine {
       if (depth === 2) {
         return {
           title: 'Still need that break',
-          body: this.#pickBody('break-2', [
+          body: this.#pickInterventionBody('break-2', 'break', [
             "Still in the red. A 10-20 minute break produces more total output than pushing through — your brain after a real rest will outperform your brain right now.",
-            "Score hasn't moved. Walk somewhere, look out a window for a minute — even brief exposure to a natural view measurably restores directed attention.",
+            "Still Fried. Walk somewhere, look out a window for a minute — even brief exposure to a natural view measurably restores directed attention.",
             "Two check-ins at this level. Your brain's focus systems need time fully offline — two minutes with no screen, no phone, no input. It's more restorative than it feels like it should be.",
           ]),
         }
       }
       return {
         title: 'Your brain is asking nicely',
-        body: this.#pickBody('break-3', [
+        body: this.#pickInterventionBody('break-3', 'break', [
           "A few check-ins deep and still here. A real 10-minute break — no screen — will produce more in the next hour than staying put right now. That's not a guess, that's consistently what the data shows.",
           "Sustained low focus burns through more energy than it generates. Step away properly — if you can fit in a 10-20 minute nap, it improves subsequent focus more than caffeine for most people.",
           "You've been in the red long enough that willpower isn't the lever anymore. Your brain needs input — water, movement, or rest. Pick one and do it for real.",
@@ -849,9 +926,9 @@ export class InsightEngine {
     if (depth === 1) {
       return {
         title: 'Concentration slipping',
-        body: this.#pickBody('slipping-1', [
+        body: this.#pickInterventionBody('slipping-1', 'slipping', [
           'Close any extra tabs and flip your phone face-down. Even having your phone visible quietly drains working memory — out of sight genuinely helps.',
-          'Sit up straight and look directly at your screen. Upright posture signals alertness to your brain and the score will start climbing back.',
+          'Sit up straight and look directly at your screen. Upright posture signals alertness to your brain and helps you move back toward Steady.',
           'Try the 4-7-8 breath: inhale for 4 seconds, hold for 7, exhale for 8. It interrupts scattered thinking and shifts your brain back into focus mode in under a minute.',
           'Look at something at least 20 feet away for 20 seconds. It cuts eye strain and gives your visual system a micro-reset — both help attention come back.',
         ]),
@@ -860,16 +937,16 @@ export class InsightEngine {
     if (depth === 2) {
       return {
         title: 'Still drifting',
-        body: this.#pickBody('slipping-2', [
+        body: this.#pickInterventionBody('slipping-2', 'slipping', [
           "Still slipping since the last check-in. Try a slow exhale that's twice as long as your inhale — it activates the vagus nerve and brings focus back faster than it sounds.",
           "Drink a glass of water right now. Even mild dehydration quietly degrades concentration — it's one of the fastest and most overlooked fixes.",
-          "Stand up and move around for 60 seconds. A short burst of movement spikes the chemicals your brain uses to stay sharp, and the score usually follows.",
+          "Stand up and move around for 60 seconds. A short burst of movement spikes the chemicals your brain uses to stay sharp, and Steady usually follows.",
         ]),
       }
     }
     return {
       title: 'Hanging in there?',
-      body: this.#pickBody('slipping-3', [
+      body: this.#pickInterventionBody('slipping-3', 'slipping', [
         "You've been drifting for a while now. A proper 10-minute break — no screen, no scrolling — restores more attentional capacity than pushing through. That's the trade worth making.",
         'Your brain tires like a muscle. A short walk, even just to the kitchen and back, is one of the most effective cognitive resets — more than caffeine for most people at this stage.',
         'Persistent drift usually means glucose or hydration is running low. Drink water, grab a small snack, and step away for two minutes. Simple, but it works.',

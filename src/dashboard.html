@@ -61,7 +61,7 @@
     }
     .stat-row {
       display: grid;
-      grid-template-columns: 54px 34px 1fr;
+      grid-template-columns: 54px 64px 1fr;
       gap: 2px 6px;
       align-items: center;
       margin-bottom: 5px;
@@ -255,6 +255,7 @@
     }
     .modal-stat { display: flex; flex-direction: column; gap: 3px; }
     .modal-stat-val { font-size: 20px; font-weight: 800; line-height: 1; }
+    .modal-stat-val.state { font-size: 15px; line-height: 1.15; }
     .modal-stat-lbl { font-size: 10px; color: var(--muted); }
     .modal-name-input {
       width: 100%; box-sizing: border-box;
@@ -270,6 +271,15 @@
       font-family: inherit; font-size: 13px; font-weight: 600; cursor: pointer;
     }
     .modal-save-btn:hover { opacity: 0.9; }
+
+    .state-header {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-top: 2px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -281,20 +291,14 @@
     <button class="icon-btn no-drag" onclick="window.lobi.resetOnboarding()" title="Re-run onboarding" style="font-size:13px; color:var(--muted); padding:2px 6px;">↺ Setup</button>
   </div>
 
-  <!-- ── Focus Ring ──────────────────────────────────────────────────────── -->
-  <div class="ring-wrap">
-    <svg width="168" height="168" viewBox="0 0 200 200">
-      <circle class="ring-bg"    cx="100" cy="100" r="80" fill="none" stroke-width="10"/>
-      <circle class="ring-score" cx="100" cy="100" r="80" fill="none" stroke-width="10"
-              id="ring" stroke-dasharray="502.65" stroke-dashoffset="0"/>
-    </svg>
-    <div class="ring-label">
-      <span class="ring-number" id="score-number">--</span>
-    </div>
+  <!-- ── Fried-flow state ────────────────────────────────────────────────── -->
+  <div class="state-header">
+    <div class="lobi-face" id="lobi-face" aria-hidden="true"><span class="face-mouth"></span></div>
+    <span class="ring-number" id="score-number">--</span>
   </div>
 
-  <!-- ── Status + session time (stacked under the ring) ─────────────────── -->
-  <div style="text-align:center; display:flex; flex-direction:column; gap:4px; margin-top:-6px;">
+  <!-- ── Status + session time ───────────────────────────────────────────── -->
+  <div style="text-align:center; display:flex; flex-direction:column; gap:4px;">
     <div id="score-status" class="ring-status">Loading...</div>
     <div id="session-time" style="font-size:10px; color:var(--muted);">Session: 0m</div>
   </div>
@@ -321,7 +325,7 @@
         </select>
       </div>
       <div id="stats-panel" class="stats-panel no-drag">
-        <!-- Default: simple high-level scores -->
+        <!-- Default: simple high-level states -->
         <div id="stats-simple" class="simple-stats">
           <div class="simple-stat-row">
             <div class="simple-stat-header">
@@ -329,7 +333,7 @@
                 Screen Strain
                 <span class="info-tip">
                   <span class="info-tip-icon">ⓘ</span>
-                  <span class="info-tip-bubble">How often you're blinking. Staring at screens reduces your blink rate, which dries out your eyes and builds up fatigue. More blinking = less strain = higher score.</span>
+                  <span class="info-tip-bubble">How often you're blinking. Staring at screens reduces your blink rate, which dries out your eyes and builds up fatigue. More blinking helps keep you Steady or Locked In.</span>
                 </span>
               </span>
               <span class="simple-stat-value" id="ss-eyes-num">--</span>
@@ -342,7 +346,7 @@
                 Engagement
                 <span class="info-tip">
                   <span class="info-tip-icon">ⓘ</span>
-                  <span class="info-tip-bubble">Whether you're actually looking at your screen. Head tilting down (like checking your phone) or turning away for too long drops this score. Straight ahead = fully engaged.</span>
+                  <span class="info-tip-bubble">Whether you're actually looking at your screen. Head tilting down (like checking your phone) or turning away for too long moves this toward Fried. Straight ahead = fully engaged.</span>
                 </span>
               </span>
               <span class="simple-stat-value" id="ss-eng-num">--</span>
@@ -355,7 +359,7 @@
                 Energy
                 <span class="info-tip">
                   <span class="info-tip-icon">ⓘ</span>
-                  <span class="info-tip-bubble">How alert and awake you look. Tracked by how often your eyes are drooping or closing (beyond normal blinks). Heavy eyelids = low energy = lower score.</span>
+                  <span class="info-tip-bubble">How alert and awake you look. Tracked by how often your eyes are drooping or closing (beyond normal blinks). Heavy eyelids move this toward Fried.</span>
                 </span>
               </span>
               <span class="simple-stat-value" id="ss-stam-num">--</span>
@@ -414,8 +418,8 @@
           <span class="stat-name">PERC</span><span class="stat-val" id="stat-perc-num">—</span>
           <div class="stat-track"><div class="stat-fill" id="stat-perc-fill"></div></div>
         </div>
-        <div class="stat-row" title="Internal score before display smoothing">
-          <span class="stat-name">Raw</span><span class="stat-val" id="stat-raw-num">—</span>
+        <div class="stat-row" title="Internal fried-flow state before display smoothing">
+          <span class="stat-name">Flow</span><span class="stat-val" id="stat-raw-num">—</span>
           <div class="stat-track"><div class="stat-fill" id="stat-raw-fill"></div></div>
         </div>
         <div class="stat-flags">
@@ -502,11 +506,11 @@
       </div>
       <div class="modal-stat">
         <span class="modal-stat-val" id="ms-avg">--</span>
-        <span class="modal-stat-lbl">Avg Score</span>
+        <span class="modal-stat-lbl">Avg Flow</span>
       </div>
       <div class="modal-stat">
         <span class="modal-stat-val" id="ms-peak">--</span>
-        <span class="modal-stat-lbl">Peak</span>
+        <span class="modal-stat-lbl">Peak Flow</span>
       </div>
       <div class="modal-stat">
         <span class="modal-stat-val" id="ms-insights">--</span>
@@ -523,11 +527,11 @@
   import { Tracker } from './tracker.js'
   import { InsightEngine } from './insights.js'
 
-  const CIRCUMFERENCE = 502.65
-
-  const ring        = document.getElementById('ring')
   const scoreNum    = document.getElementById('score-number')
   const scoreStat   = document.getElementById('score-status')
+  const lobiFace    = document.getElementById('lobi-face')
+  const dashboardPage = document.querySelector('.dashboard-page')
+  const statsPanel  = document.getElementById('stats-panel')
   const insightList = document.getElementById('insights-list')
   const emptyState  = document.getElementById('empty-state')
   const errorBanner = document.getElementById('tracker-error')
@@ -535,6 +539,7 @@
 
   let engine  = new InsightEngine()
   let tracker = null
+  let interventionPreferences = []
   const video        = document.getElementById('tracking-video')
   const cameraSelect = document.getElementById('camera-select')
 
@@ -542,6 +547,13 @@
   let displayCount = 1
   window.lobi?.getDisplayCount().then(n => { displayCount = n ?? 1 })
   window.lobi?.onDisplayCountChange(n => { displayCount = n })
+
+  window.lobi?.getSettings().then((settings) => {
+    interventionPreferences = Array.isArray(settings?.interventionPreferences)
+      ? settings.interventionPreferences
+      : []
+    engine.setInterventionPreferences(interventionPreferences)
+  })
 
   // ── Advanced panel toggle ─────────────────────────────────────────────────
   window.toggleAdvanced = function() {
@@ -553,9 +565,38 @@
   }
 
   function modeFor(score) {
-    if (score >= 70) return 'ok'
-    if (score >= 40) return 'warn'
+    if (score >= 80) return 'ok'
+    if (score >= 50) return 'warn'
     return 'bad'
+  }
+
+  function flowStateFor(score) {
+    if (score >= 80) return 'Locked In'
+    if (score >= 50) return 'Steady'
+    return 'Fried'
+  }
+
+  function flowColour(state) {
+    if (state === 'Locked In') return 'var(--green)'
+    if (state === 'Steady') return 'var(--yellow)'
+    return 'var(--red)'
+  }
+
+  function flowFaceClass(state) {
+    if (state === 'Locked In') return 'locked'
+    if (state === 'Steady') return 'steady'
+    return 'fried'
+  }
+
+  function setDashboardFace(state, calibrating = false) {
+    lobiFace.className = calibrating
+      ? 'lobi-face'
+      : `lobi-face ${flowFaceClass(state)}`
+  }
+
+  function setDashboardDisabled(disabled) {
+    dashboardPage.classList.toggle('face-disabled', disabled)
+    if (disabled) lobiFace.className = 'lobi-face disabled'
   }
 
   // EMA-smoothed targets for the 4 high-level bars. The engine tick (~15/s)
@@ -577,7 +618,7 @@
     const m = modeFor(rounded)
     fill.style.width = `${Math.min(100, Math.max(0, score))}%`
     fill.className = `simple-fill ${m}`
-    num.textContent = String(rounded)
+    num.textContent = flowStateFor(rounded)
     num.className = `simple-stat-value ${m}`
   }
 
@@ -668,7 +709,7 @@
     setStatBar('stat-perc-fill', 'stat-perc-num', pc, `${(pc * 100).toFixed(0)}%`, 'perc')
 
     const raw = live.rawScore ?? 100
-    setStatBar('stat-raw-fill', 'stat-raw-num', raw / 100, String(Math.round(raw)), 'raw')
+    setStatBar('stat-raw-fill', 'stat-raw-num', raw / 100, flowStateFor(Math.round(raw)), 'raw')
 
     const fp = data.facePresent
     setFlag('stat-flag-geom', !!(fp && data.geometryReliable))
@@ -685,44 +726,146 @@
   // restarts so the user doesn't have to re-pick their camera each session.
   let selectedDeviceId = localStorage.getItem('lobi.cameraDeviceId') || null
 
-  // ── Tray icon — score number drawn on a canvas, sent to main as PNG ───────
-  let lastTrayScore = -1
+  // ── Tray icon — fried-flow face drawn on a canvas, sent to main as PNG ───
+  let lastTrayState = null
   const trayCanvas  = document.createElement('canvas')
   const TRAY_PX     = 64   // logical size; @2x Retina renders at 32pt
   trayCanvas.width  = TRAY_PX
   trayCanvas.height = TRAY_PX
   const trayCtx = trayCanvas.getContext('2d')
+  const dockCanvas = document.createElement('canvas')
+  const DOCK_PX = 512
+  dockCanvas.width = DOCK_PX
+  dockCanvas.height = DOCK_PX
+  const dockCtx = dockCanvas.getContext('2d')
 
-  // score = number | 'away' | 'break' | null
-  function updateTrayIcon(score) {
-    if (score === lastTrayScore) return
-    lastTrayScore = score
+  function trayFaceMeta(state) {
+    if (state === 'Locked In') return { hex: '#34d399', mood: 'locked' }
+    if (state === 'Steady') return { hex: '#fbbf24', mood: 'steady' }
+    if (state === 'Fried') return { hex: '#f87171', mood: 'fried' }
+    if (state === 'break') return { hex: '#60a5fa', mood: 'break' }
+    return { hex: '#6b7280', mood: 'away' }
+  }
 
-    let hex, text
-    if (score === 'break') {
-      hex = '#60a5fa'; text = 'BRK'
-    } else if (score === 'away' || score == null) {
-      hex = '#6b7280'; text = '–'
+  function clearStats() {
+    ['ss-eyes', 'ss-eng', 'ss-stam'].forEach((id) => {
+      document.getElementById(`${id}-num`).textContent = '--'
+      document.getElementById(`${id}-num`).className = 'simple-stat-value'
+      document.getElementById(`${id}-fill`).style.width = '0%'
+    })
+    smoothedScores.eyeComfort = smoothedScores.engagement = null
+    smoothedScores.energy = null
+
+    statsPanel.querySelectorAll('.stat-val').forEach((el) => { el.textContent = '—' })
+    statsPanel.querySelectorAll('.stat-fill').forEach((el) => {
+      el.style.width = '0%'
+      el.classList.remove('warn', 'bad', 'ok')
+    })
+    statsPanel.querySelectorAll('.stat-flag').forEach((el) => {
+      el.classList.remove('on')
+      el.classList.add('off')
+    })
+  }
+
+  function drawFace(ctx, size, state, { clear = true } = {}) {
+    const { hex, mood } = trayFaceMeta(state)
+    const cx = size / 2
+    const cy = size / 2
+    const s = size / 64
+
+    if (clear) ctx.clearRect(0, 0, size, size)
+    ctx.strokeStyle = hex
+    ctx.fillStyle = hex
+    ctx.lineWidth = 5 * s
+    ctx.lineCap = 'round'
+    ctx.lineJoin = 'round'
+
+    if (mood === 'away') {
+      ctx.font = `700 ${22 * s}px -apple-system, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('-', cx, cy)
+      return
+    }
+
+    if (mood === 'break') {
+      ctx.beginPath()
+      ctx.arc(cx, cy, 20 * s, 0, Math.PI * 2)
+      ctx.stroke()
+      ctx.font = `700 ${15 * s}px -apple-system, sans-serif`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('BRK', cx, cy + 1 * s)
+      return
+    }
+
+    ctx.beginPath()
+    ctx.arc(cx, cy, 22 * s, 0, Math.PI * 2)
+    ctx.stroke()
+
+    if (mood === 'fried') {
+      ctx.beginPath()
+      ctx.moveTo(19 * s, 24 * s)
+      ctx.lineTo(27 * s, 27 * s)
+      ctx.moveTo(45 * s, 24 * s)
+      ctx.lineTo(37 * s, 27 * s)
+      ctx.stroke()
+
+      ctx.beginPath()
+      ctx.arc(cx, 43 * s, 9 * s, Math.PI, Math.PI * 2)
+      ctx.stroke()
+      return
+    }
+
+    ctx.beginPath()
+    ctx.arc(23 * s, 25 * s, 3 * s, 0, Math.PI * 2)
+    ctx.arc(41 * s, 25 * s, 3 * s, 0, Math.PI * 2)
+    ctx.fill()
+
+    ctx.beginPath()
+    if (mood === 'steady') {
+      ctx.moveTo(23 * s, 41 * s)
+      ctx.lineTo(41 * s, 41 * s)
     } else {
-      hex  = score >= 70 ? '#34d399' : score >= 40 ? '#fbbf24' : '#f87171'
-      text = String(score)
+      ctx.arc(cx, 36 * s, 10 * s, 0.15 * Math.PI, 0.85 * Math.PI)
     }
+    ctx.stroke()
+  }
 
-    // Pick font size, then shrink until the text fits within the canvas width
-    let fontSize = text.length > 2 ? 16 : 20
-    trayCtx.font = `700 ${fontSize}px -apple-system, sans-serif`
-    while (trayCtx.measureText(text).width > TRAY_PX - 8 && fontSize > 8) {
-      fontSize -= 1
-      trayCtx.font = `700 ${fontSize}px -apple-system, sans-serif`
-    }
+  function drawTrayFace(state) {
+    drawFace(trayCtx, TRAY_PX, state)
+  }
 
-    trayCtx.clearRect(0, 0, TRAY_PX, TRAY_PX)
-    trayCtx.fillStyle    = hex
-    trayCtx.textAlign    = 'center'
-    trayCtx.textBaseline = 'middle'
-    trayCtx.fillText(text, TRAY_PX / 2, TRAY_PX / 2)
+  function drawDockFace(state) {
+    const { hex } = trayFaceMeta(state)
+    const bg = dockCtx.createLinearGradient(0, 0, DOCK_PX, DOCK_PX)
+    bg.addColorStop(0, '#17172a')
+    bg.addColorStop(1, '#0e0e16')
 
+    dockCtx.clearRect(0, 0, DOCK_PX, DOCK_PX)
+    dockCtx.fillStyle = bg
+    dockCtx.beginPath()
+    dockCtx.roundRect(48, 48, 416, 416, 112)
+    dockCtx.fill()
+    dockCtx.strokeStyle = hex
+    dockCtx.lineWidth = 18
+    dockCtx.stroke()
+
+    dockCtx.save()
+    dockCtx.translate(0, 8)
+    drawFace(dockCtx, DOCK_PX, state, { clear: false })
+    dockCtx.restore()
+  }
+
+  // state = 'Fried' | 'Steady' | 'Locked In' | 'away' | 'break' | null
+  function updateTrayIcon(state) {
+    if (state === lastTrayState) return
+    lastTrayState = state
+
+    drawTrayFace(state)
+    drawDockFace(state)
     window.lobi?.updateTrayIcon(trayCanvas.toDataURL('image/png'))
+    window.lobi?.updateDockIcon(dockCanvas.toDataURL('image/png'))
   }
 
   const breakBanner     = document.getElementById('break-banner')
@@ -744,18 +887,22 @@
     breakBanner.style.display = (sessionRunning && onBreak) ? 'flex' : 'none'
     if (onBreak) breakBannerTime.textContent = fmtBreakDuration(engine.breakDurationMs)
 
-    const score  = engine.score
-    const colour = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--yellow)' : 'var(--red)'
+    const flowState = engine.flowState
+    const colour = flowColour(flowState)
+    const faceGone = !data.facePresent
+    const dashboardDisabled = sessionRunning && faceGone
 
-    // Ring
-    ring.style.strokeDashoffset = CIRCUMFERENCE * (1 - score / 100)
-    ring.style.stroke = colour
-
-    // Score label
-    scoreNum.textContent = score
-    scoreNum.style.color = colour
-    scoreStat.textContent = engine.status
-    scoreStat.classList.toggle('calibrating', engine.isCalibrating)
+    // Fried-flow label
+    setDashboardDisabled(dashboardDisabled)
+    if (!dashboardDisabled) setDashboardFace(flowState, engine.isCalibrating)
+    scoreNum.textContent = dashboardDisabled
+      ? (onBreak ? 'On Break' : 'No Face')
+      : (engine.isCalibrating ? '--' : flowState)
+    scoreNum.style.color = dashboardDisabled ? 'var(--muted)' : colour
+    scoreStat.textContent = dashboardDisabled
+      ? (onBreak ? 'Break mode' : 'No face detected')
+      : (engine.isCalibrating ? engine.status : 'Fried-flow')
+    scoreStat.classList.toggle('calibrating', engine.isCalibrating && !dashboardDisabled)
 
     // Session timer — only update while a session is actively running
     if (sessionRunning) sessionLbl.textContent = `Session: ${engine.sessionMinutes}m`
@@ -763,21 +910,24 @@
     // Enable "End Session" the moment calibration finishes
     if (sessionRunning) setSessionBtnEnabled(!engine.isCalibrating)
 
-    const faceGone = !data.facePresent
+    let trayTitle = flowState === 'Locked In' ? 'Flow' : flowState
 
     if (onBreak) {
       updateTrayIcon('break')
       window.lobi?.updateTrayStatus('BREAK')
+      trayTitle = 'Break'
     } else if (faceGone) {
       updateTrayIcon('away')
       window.lobi?.updateTrayStatus('AWAY')
+      trayTitle = 'Away'
     } else {
-      updateTrayIcon(score)
-      window.lobi?.updateTrayStatus(engine.status)
+      updateTrayIcon(flowState)
+      window.lobi?.updateTrayStatus(flowState)
     }
-    window.lobi?.updateTrayTitle('')
+    window.lobi?.updateTrayTitle(trayTitle)
 
-    renderLiveStats(data)
+    if (dashboardDisabled) clearStats()
+    else renderLiveStats(data)
   }
 
   // ── Webcam source picker ─────────────────────────────────────────────────
@@ -858,17 +1008,14 @@
     return rem > 0 ? `${h}h ${rem}m` : `${h}h`
   }
 
-  function scoreColour(v) {
-    return v >= 70 ? 'var(--green)' : v >= 40 ? 'var(--yellow)' : 'var(--red)'
-  }
-
   function freezeUI() {
     sessionRunning         = false
+    setDashboardDisabled(false)
     sessionLbl.textContent = 'Session saved ✓'
     sessionBtn.textContent = '▶ New Session'
     sessionBtn.style.color = 'var(--green)'
     setSessionBtnEnabled(true)
-    ring.style.opacity       = '0.3'
+    setDashboardFace('Steady', true)
     scoreNum.textContent     = '--'
     scoreStat.textContent    = 'No active session'
     scoreStat.classList.remove('calibrating')
@@ -894,12 +1041,14 @@
     document.getElementById('ms-duration').textContent = fmtDuration(data.durationMs)
 
     const avgEl  = document.getElementById('ms-avg')
-    avgEl.textContent = data.avgScore
-    avgEl.style.color = scoreColour(data.avgScore)
+    avgEl.textContent = data.avgFlowState
+    avgEl.classList.add('state')
+    avgEl.style.color = flowColour(data.avgFlowState)
 
     const peakEl = document.getElementById('ms-peak')
-    peakEl.textContent = data.peakScore
-    peakEl.style.color = scoreColour(data.peakScore)
+    peakEl.textContent = data.peakFlowState
+    peakEl.classList.add('state')
+    peakEl.style.color = flowColour(data.peakFlowState)
 
     document.getElementById('ms-insights').textContent = data.insightCount
 
@@ -920,12 +1069,13 @@
 
   async function startNewSession() {
     engine                 = new InsightEngine()
+    engine.setInterventionPreferences(interventionPreferences)
     sessionRunning         = true
+    setDashboardDisabled(false)
     sessionLbl.textContent = 'Session: 0m'
     sessionBtn.textContent = 'End Session'
     sessionBtn.style.color = 'var(--muted)'
     setSessionBtnEnabled(false)   // re-lock until the next calibration completes
-    ring.style.opacity     = ''
     scoreStat.textContent  = 'Loading...'
 
     try {

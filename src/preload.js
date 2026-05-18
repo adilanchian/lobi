@@ -17,7 +17,10 @@ contextBridge.exposeInMainWorld('lobi', {
   hideWindow: () => ipcRenderer.send('hide-window'),
 
   // Called at the end of onboarding — saves the flag and opens the dashboard
-  completeOnboarding: () => ipcRenderer.send('onboarding-done'),
+  completeOnboarding: (settings) => ipcRenderer.send('onboarding-done', settings),
+
+  // App preferences saved during onboarding
+  getSettings: () => ipcRenderer.invoke('get-settings'),
 
   // Triggers the native macOS camera permission dialog from the main process
   requestCameraPermission: () => ipcRenderer.invoke('request-camera-permission'),
@@ -25,8 +28,11 @@ contextBridge.exposeInMainWorld('lobi', {
   // Triggers the OS notification permission prompt (macOS asks on first notification)
   requestNotificationPermission: () => ipcRenderer.invoke('request-notification-permission'),
 
-  // Sends a canvas-rendered score PNG to main to set as the tray icon
+  // Sends a canvas-rendered fried-flow PNG to main to set as the tray icon
   updateTrayIcon: (dataURL) => ipcRenderer.send('tray-icon', dataURL),
+
+  // macOS only: update the Dock icon with the current fried-flow face
+  updateDockIcon: (dataURL) => ipcRenderer.send('dock-icon', dataURL),
 
   // Session history
   saveSession:    (data)              => ipcRenderer.invoke('save-session', data),

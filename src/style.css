@@ -87,38 +87,113 @@ button:active { transform: scale(0.97); }
   padding: 16px;
 }
 
-/* ─── Focus Ring ─────────────────────────────────────────────────────────────── */
-
-.ring-wrap {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-}
-
-.ring-wrap svg { transform: rotate(-90deg); }
-
-.ring-bg    { stroke: var(--border); }
-.ring-score {
-  stroke: var(--green);
-  stroke-linecap: round;
-  transition: stroke-dashoffset 0.6s ease, stroke 0.6s ease;
-}
-
-.ring-label {
-  position: absolute;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
+/* ─── Fried-flow State ──────────────────────────────────────────────────────── */
 
 .ring-number {
-  font-size: 44px;
+  font-size: 24px;
   font-weight: 800;
-  letter-spacing: -2px;
+  letter-spacing: 0;
   line-height: 1;
+  max-width: 118px;
+  text-align: center;
+}
+
+.lobi-face {
+  --face-color: var(--muted);
+  width: 54px;
+  height: 54px;
+  border: 3px solid var(--face-color);
+  border-radius: 50%;
+  position: relative;
+  color: var(--face-color);
+  transition: color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+
+.lobi-face::before,
+.lobi-face::after {
+  content: '';
+  position: absolute;
+  top: 17px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.lobi-face::before { left: 14px; }
+.lobi-face::after { right: 14px; }
+
+.lobi-face .face-mouth {
+  position: absolute;
+  left: 50%;
+  bottom: 13px;
+  width: 22px;
+  height: 12px;
+  transform: translateX(-50%);
+  border: 3px solid currentColor;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  border-radius: 0 0 18px 18px;
+}
+
+.lobi-face.fried {
+  --face-color: var(--red);
+  transform: rotate(-4deg);
+}
+
+.lobi-face.fried::before,
+.lobi-face.fried::after {
+  width: 10px;
+  height: 3px;
+  border-radius: 3px;
+}
+
+.lobi-face.fried::before { transform: rotate(22deg); }
+.lobi-face.fried::after { transform: rotate(-22deg); }
+
+.lobi-face.fried .face-mouth {
+  bottom: 9px;
+  height: 10px;
+  border-top: 3px solid currentColor;
+  border-bottom: 0;
+  border-radius: 18px 18px 0 0;
+}
+
+.lobi-face.steady {
+  --face-color: var(--yellow);
+}
+
+.lobi-face.steady .face-mouth {
+  bottom: 15px;
+  height: 0;
+  border-bottom-width: 3px;
+  border-radius: 3px;
+}
+
+.lobi-face.locked {
+  --face-color: var(--green);
+  transform: scale(1.04);
+}
+
+.lobi-face.disabled {
+  --face-color: var(--muted);
+  opacity: 0.45;
+  transform: none;
+}
+
+.lobi-face.disabled::before,
+.lobi-face.disabled::after {
+  width: 9px;
+  height: 3px;
+  border-radius: 3px;
+}
+
+.lobi-face.disabled .face-mouth {
+  bottom: 15px;
+  height: 0;
+  border-bottom-width: 3px;
+  border-radius: 3px;
 }
 
 .ring-status {
@@ -289,6 +364,15 @@ button:active { transform: scale(0.97); }
   flex-direction: column;
   padding: 0 20px 20px;
   gap: 16px;
+}
+
+.dashboard-page.face-disabled .ring-number {
+  color: var(--muted) !important;
+  opacity: 0.7;
+}
+
+.dashboard-page.face-disabled .stats-panel {
+  opacity: 0.55;
 }
 
 /* Fills leftover vertical space when the window is tall; grows with content when many insights (window scrolls — no cramped inner scroll). */

@@ -36,6 +36,41 @@
       transition: color 0.15s;
     }
     .btn-skip:hover { color: var(--text); }
+
+    .intervention-list {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .intervention-option {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 9px 10px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .intervention-option input {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .intervention-option span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   </style>
 </head>
 <body>
@@ -51,6 +86,7 @@
     <div class="dot"></div>
     <div class="dot"></div>
     <div class="dot"></div>
+    <div class="dot"></div>
   </div>
 
   <!-- ── Step 1: Welcome ──────────────────────────────────────────────────── -->
@@ -63,7 +99,7 @@
       </p>
       <ul style="color: var(--muted); padding-left: 18px; line-height: 2;">
         <li>👁&ensp; Track blink rate &amp; eye focus signals</li>
-        <li>📊&ensp; Score your focus in real-time</li>
+        <li>📊&ensp; Show your fried-flow state in real-time</li>
         <li>🔔&ensp; Alert you when it's time for a break</li>
       </ul>
     </div>
@@ -112,7 +148,7 @@
           <div>
             <div class="notif-app">Lobi</div>
             <div class="notif-title">Time for a micro break</div>
-            <div class="notif-body">Your concentration score is dipping. A 2-minute reset will keep you sharp.</div>
+            <div class="notif-body">Your fried-flow state is looking Fried. A 2-minute reset will keep you sharp.</div>
           </div>
         </div>
       </div>
@@ -127,6 +163,30 @@
 
   <!-- ── Step 4: Ready ────────────────────────────────────────────────────── -->
   <div class="step" id="step-4">
+    <div class="step-content">
+      <div class="step-icon">🧰</div>
+      <h1>What resets actually work for you?</h1>
+      <p>Select all that apply. Lobi will use these when it nudges you during focus dips.</p>
+
+      <div class="intervention-list">
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="water" checked><span>Drink water</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="walk" checked><span>Take a walk</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="coffee"><span>Coffee or tea break</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="snack"><span>Eat a snack</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="stretch" checked><span>Stretch</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="breathing"><span>Breathing reset</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="eyeRest" checked><span>Rest your eyes</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="outside"><span>Step outside</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="noScreen" checked><span>No-screen break</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="music"><span>Play music</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="tidy"><span>Tidy your desk</span></label>
+        <label class="intervention-option"><input type="checkbox" name="intervention" value="nap"><span>Take a short nap</span></label>
+      </div>
+    </div>
+    <button class="btn-primary no-drag" onclick="goTo(5)">Looks right →</button>
+  </div>
+
+  <div class="step" id="step-5">
     <div class="step-content">
       <div class="step-icon">✅</div>
       <h1>You're all set!</h1>
@@ -213,6 +273,11 @@
   function skipNotifications() {
     notificationsEnabled = false
     goTo(4)
+  }
+
+  function selectedInterventions() {
+    return Array.from(document.querySelectorAll('input[name="intervention"]:checked'))
+      .map(input => input.value)
   }
 
   async function startCamera() {
@@ -314,7 +379,10 @@
   function finish() {
     // Stop the preview stream — the dashboard will start its own tracking stream
     cameraStream?.getTracks().forEach(t => t.stop())
-    window.lobi.completeOnboarding({ notificationsEnabled })
+    window.lobi.completeOnboarding({
+      notificationsEnabled,
+      interventionPreferences: selectedInterventions(),
+    })
   }
 </script>
 

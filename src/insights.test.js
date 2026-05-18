@@ -215,6 +215,27 @@ describe('score threshold', () => {
 })
 
 // ── 5. Escalation: slipping → break ─────────────────────────────────────────
+describe('intervention preferences', () => {
+  it('uses selected interventions in focus-dip recommendations', () => {
+    const engine = new InsightEngine()
+    engine.setInterventionPreferences(['coffee'])
+    calibrate(engine)
+    driveToBreak(engine)
+
+    const negative = firedInsights.find(i => [
+      'Concentration slipping',
+      'Still drifting',
+      'Hanging in there?',
+      'Time for a break',
+      'Still need that break',
+      'Your brain is asking nicely',
+      'Things slipped further',
+    ].includes(i.title))
+
+    expect(negative?.body.toLowerCase()).toContain('coffee')
+  })
+})
+
 describe('escalation', () => {
   it('fires an escalation or break notification when tier worsens', () => {
     const engine = new InsightEngine()

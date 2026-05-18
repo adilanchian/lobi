@@ -887,11 +887,21 @@
     breakBanner.style.display = (sessionRunning && onBreak) ? 'flex' : 'none'
     if (onBreak) breakBannerTime.textContent = fmtBreakDuration(engine.breakDurationMs)
 
+    if (sessionRunning && onBreak && !breakPausedTracked) {
+      breakPausedTracked = true
+      window.lobi?.track('session_paused', {
+        session_minutes: engine.sessionMinutes,
+        break_duration_ms: engine.breakDurationMs,
+      })
+    } else if (!onBreak) {
+      breakPausedTracked = false
+    }
+
     const flowState = engine.flowState
-    const colour = flowColour(flowState)
     const faceGone = !data.facePresent
     const dashboardDisabled = sessionRunning && faceGone
 
+    // Track session pause when dashboard is disabled
     if (sessionRunning && dashboardDisabled && !breakPausedTracked) {
       breakPausedTracked = true
       window.lobi?.track('session_paused', {
@@ -901,6 +911,9 @@
     } else if (!dashboardDisabled) {
       breakPausedTracked = false
     }
+
+    const score  = engine.score
+    const colour = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--yellow)' : 'var(--red)'
 
     // Fried-flow label
     setDashboardDisabled(dashboardDisabled)
@@ -1094,6 +1107,7 @@
     engine                 = new InsightEngine()
     breakPausedTracked     = false
     engine.setInterventionPreferences(interventionPreferences)
+    breakPausedTracked     = false
     sessionRunning         = true
     setDashboardDisabled(false)
     sessionLbl.textContent = 'Session: 0m'

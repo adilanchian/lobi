@@ -17,8 +17,7 @@ contextBridge.exposeInMainWorld("lobi", {
   hideWindow: () => ipcRenderer.send("hide-window"),
 
   // Called at the end of onboarding — saves the flag and opens the dashboard
-  completeOnboarding: (settings) =>
-    ipcRenderer.send("onboarding-done", settings),
+  completeOnboarding: (opts) => ipcRenderer.send("onboarding-done", opts ?? {}),
 
   // Analytics — forwarded to PostHog in the main process
   track: (event, properties) =>

@@ -31,7 +31,10 @@ const SESSIONS_FILE = path.join(app.getPath("userData"), "sessions.json");
 
 function readSettings() {
   try {
-    return { onboardingDone: false, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8")) };
+    return {
+      onboardingDone: false,
+      ...JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8")),
+    };
   } catch {
     return { onboardingDone: false };
   }
@@ -237,10 +240,22 @@ function rebuildTrayMenu() {
 function updateDockIcon() {
   const dark = nativeTheme.shouldUseDarkColors;
   if (process.platform === "darwin") {
-    const iconPath = path.join(__dirname, "..", "assets", "macOS", `${dark ? "icon-dark" : "icon-light"}-dock.png`);
+    const iconPath = path.join(
+      __dirname,
+      "..",
+      "assets",
+      "macOS",
+      `${dark ? "icon-dark" : "icon-light"}-dock.png`,
+    );
     app.dock.setIcon(iconPath);
   } else if (process.platform === "win32") {
-    const iconPath = path.join(__dirname, "..", "assets", "windows", `${dark ? "icon-dark" : "icon-light"}.ico`);
+    const iconPath = path.join(
+      __dirname,
+      "..",
+      "assets",
+      "windows",
+      `${dark ? "icon-dark" : "icon-light"}.ico`,
+    );
     for (const win of BrowserWindow.getAllWindows()) win.setIcon(iconPath);
   }
 }
@@ -333,6 +348,9 @@ ipcMain.on("analytics-track", (_e, { event, properties = {} }) => {
 });
 
 ipcMain.handle("get-settings", () => readSettings());
+ipcMain.on("analytics-track", (_e, { event, properties = {} }) => {
+  track(event, properties);
+});
 
 ipcMain.handle("save-session", (_e, data) => {
   const sessions = readSessions();
@@ -392,7 +410,13 @@ ipcMain.on("reset-onboarding", () => {
 
 ipcMain.on(
   "onboarding-done",
-  (_e, { notificationsEnabled: notifEnabled = true, interventionPreferences = [] } = {}) => {
+  (
+    _e,
+    {
+      notificationsEnabled: notifEnabled = true,
+      interventionPreferences = [],
+    } = {},
+  ) => {
     notificationsEnabled = notifEnabled;
     writeSettings({
       ...readSettings(),

@@ -1,53 +1,66 @@
 // preload.js — Context bridge between Electron main process and renderer pages
 // Exposes a safe `window.lobi` object the renderer can call without Node access
 
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer } = require("electron");
 
-contextBridge.exposeInMainWorld('lobi', {
+contextBridge.exposeInMainWorld("lobi", {
   // Fire a system notification (insight reached the main process for delivery)
-  sendInsight: (title, body) => ipcRenderer.send('notify', { title, body }),
+  sendInsight: (title, body) => ipcRenderer.send("notify", { title, body }),
 
   // Update the menu-bar tray label with the current focus status
-  updateTrayStatus: (status) => ipcRenderer.send('tray-status', status),
+  updateTrayStatus: (status) => ipcRenderer.send("tray-status", status),
 
   // Update the macOS menu bar text next to the tray icon (no-op on Windows/Linux)
-  updateTrayTitle: (title) => ipcRenderer.send('tray-title', title),
+  updateTrayTitle: (title) => ipcRenderer.send("tray-title", title),
 
   // Hide the current window back to the tray
-  hideWindow: () => ipcRenderer.send('hide-window'),
+  hideWindow: () => ipcRenderer.send("hide-window"),
 
   // Called at the end of onboarding — saves the flag and opens the dashboard
-  completeOnboarding: (opts) => ipcRenderer.send('onboarding-done', opts ?? {}),
+  completeOnboarding: (settings) =>
+    ipcRenderer.send("onboarding-done", settings),
 
   // Analytics — forwarded to PostHog in the main process
-  track: (event, properties) => ipcRenderer.send('analytics-track', { event, properties }),
+  track: (event, properties) =>
+    ipcRenderer.send("analytics-track", { event, properties }),
+
+  // App preferences saved during onboarding
+  getSettings: () => ipcRenderer.invoke("get-settings"),
 
   // Triggers the native macOS camera permission dialog from the main process
-  requestCameraPermission: () => ipcRenderer.invoke('request-camera-permission'),
+  requestCameraPermission: () =>
+    ipcRenderer.invoke("request-camera-permission"),
 
   // Triggers the OS notification permission prompt (macOS asks on first notification)
-  requestNotificationPermission: () => ipcRenderer.invoke('request-notification-permission'),
+  requestNotificationPermission: () =>
+    ipcRenderer.invoke("request-notification-permission"),
 
-  // Sends a canvas-rendered score PNG to main to set as the tray icon
-  updateTrayIcon: (dataURL) => ipcRenderer.send('tray-icon', dataURL),
+  // Sends a canvas-rendered fried-flow PNG to main to set as the tray icon
+  updateTrayIcon: (dataURL) => ipcRenderer.send("tray-icon", dataURL),
+
+  // macOS only: update the Dock icon with the current fried-flow face
+  updateDockIcon: (dataURL) => ipcRenderer.send("dock-icon", dataURL),
 
   // Session history
-  saveSession:    (data)              => ipcRenderer.invoke('save-session', data),
-  getSessions:    ()                  => ipcRenderer.invoke('get-sessions'),
-  updateSession:  (startTime, title)  => ipcRenderer.invoke('update-session', startTime, title),
-  openHistory:    ()                  => ipcRenderer.send('open-history'),
+  saveSession: (data) => ipcRenderer.invoke("save-session", data),
+  getSessions: () => ipcRenderer.invoke("get-sessions"),
+  updateSession: (startTime, title) =>
+    ipcRenderer.invoke("update-session", startTime, title),
+  openHistory: () => ipcRenderer.send("open-history"),
 
   // Dev helper — resets onboarding state and reopens the setup flow
-  resetOnboarding: () => ipcRenderer.send('reset-onboarding'),
+  resetOnboarding: () => ipcRenderer.send("reset-onboarding"),
 
   // Display count — used to suppress yaw distraction penalty on multi-monitor setups
-  getDisplayCount:      ()         => ipcRenderer.invoke('get-display-count'),
-  onDisplayCountChange: (callback) => ipcRenderer.on('display-count', (_e, count) => callback(count)),
+  getDisplayCount: () => ipcRenderer.invoke("get-display-count"),
+  onDisplayCountChange: (callback) =>
+    ipcRenderer.on("display-count", (_e, count) => callback(count)),
 
   // Version + updates
-  getVersion:      ()         => ipcRenderer.invoke('get-version'),
-  getUpdateState:  ()         => ipcRenderer.invoke('get-update-state'),
-  checkForUpdate:  ()         => ipcRenderer.invoke('check-for-update'),
-  installUpdate:   ()         => ipcRenderer.send('install-update'),
-  onUpdateState:  (callback)  => ipcRenderer.on('update-state', (_e, state) => callback(state)),
-})
+  getVersion: () => ipcRenderer.invoke("get-version"),
+  getUpdateState: () => ipcRenderer.invoke("get-update-state"),
+  checkForUpdate: () => ipcRenderer.invoke("check-for-update"),
+  installUpdate: () => ipcRenderer.send("install-update"),
+  onUpdateState: (callback) =>
+    ipcRenderer.on("update-state", (_e, state) => callback(state)),
+});

@@ -31,7 +31,7 @@ const SESSIONS_FILE = path.join(app.getPath("userData"), "sessions.json");
 
 function readSettings() {
   try {
-    return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+    return { onboardingDone: false, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8")) };
   } catch {
     return { onboardingDone: false };
   }
@@ -246,10 +246,10 @@ function updateDockIcon() {
 }
 
 function setupTray() {
-  // Start with an empty icon — the dashboard will push a live score image once tracking starts
+  // Start with an empty icon — the dashboard will push a live fried-flow image once tracking starts
   tray = new Tray(nativeImage.createEmpty());
 
-  // macOS: brain emoji anchors the tray item while the score icon loads
+  // macOS: brain emoji anchors the tray item while the fried-flow icon loads
   if (process.platform === "darwin") tray.setTitle("");
 
   buildTrayMenu();
@@ -302,6 +302,16 @@ ipcMain.on("tray-icon", (_e, dataURL) => {
   tray.setImage(image);
 });
 
+ipcMain.on("dock-icon", (_e, dataURL) => {
+  if (process.platform !== "darwin") return;
+  const buf = Buffer.from(
+    dataURL.replace(/^data:image\/png;base64,/, ""),
+    "base64",
+  );
+  const image = nativeImage.createFromBuffer(buf);
+  app.dock.setIcon(image);
+});
+
 ipcMain.on("notify", (_e, { title, body }) => sendNotification(title, body));
 
 ipcMain.on("tray-status", (_e, status) => setTrayStatus(status));
@@ -321,6 +331,8 @@ ipcMain.on("open-history", openHistory);
 ipcMain.on("analytics-track", (_e, { event, properties = {} }) => {
   track(event, properties);
 });
+
+ipcMain.handle("get-settings", () => readSettings());
 
 ipcMain.handle("save-session", (_e, data) => {
   const sessions = readSessions();
@@ -372,7 +384,7 @@ app.whenReady().then(() => {
 });
 
 ipcMain.on("reset-onboarding", () => {
-  writeSettings({ onboardingDone: false });
+  writeSettings({ ...readSettings(), onboardingDone: false });
   mainWindow?.destroy();
   mainWindow = null;
   openOnboarding();
@@ -380,9 +392,14 @@ ipcMain.on("reset-onboarding", () => {
 
 ipcMain.on(
   "onboarding-done",
-  (_e, { notificationsEnabled: notifEnabled = true } = {}) => {
+  (_e, { notificationsEnabled: notifEnabled = true, interventionPreferences = [] } = {}) => {
     notificationsEnabled = notifEnabled;
-    writeSettings({ onboardingDone: true, notificationsEnabled: notifEnabled });
+    writeSettings({
+      ...readSettings(),
+      onboardingDone: true,
+      notificationsEnabled: notifEnabled,
+      interventionPreferences,
+    });
     if (notifEnabled) track("notifications_enabled");
     onboardingWin?.destroy();
     openDashboard();

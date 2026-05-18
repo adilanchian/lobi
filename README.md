@@ -1,6 +1,6 @@
 # Lobi
 
-Desktop focus feedback built on **MediaPipe Face Landmarker** landmarks in the browser (`src/tracker.js`), a **0–100 concentration score** (`src/insights.js`), and tunable constants in **`src/neurogaze-config.js`** (single source of truth for thresholds and weights).
+Desktop focus feedback built on **MediaPipe Face Landmarker** landmarks in the browser (`src/tracker.js`), an internal focus model surfaced as the **fried-flow scale** (`Fried`, `Steady`, `Locked In`) in `src/insights.js`, and tunable constants in **`src/neurogaze-config.js`** (single source of truth for thresholds and weights).
 
 This document describes **exactly** what is computed in code and **why** those quantities are used.
 
@@ -215,7 +215,7 @@ A laptop with one external display counts as 2 displays, correctly suppressing y
 
 ---
 
-## Focus score: component model (`InsightEngine`)
+## Fried-flow model (`InsightEngine`)
 
 The score is a **three-component average**, each subscore 0–100, evaluated at `SCORE_TICK_HZ` (8 Hz) when calibrated and `concentrationFrameTrusted`.
 
@@ -312,13 +312,13 @@ A "Focus boost +X%" insight fires immediately on return, quantifying how much th
 
 ### UI states
 
-While away, the tray icon switches from the live score to a gray `–`. After 1 minute, it switches to a blue `BRK` indicator. A break banner appears in the dashboard showing elapsed away time. On return, the banner disappears and the tray icon resumes showing the live score.
+While away, the tray icon switches from the live fried-flow state to a gray `–`. After 1 minute, it switches to a blue `BRK` indicator. A break banner appears in the dashboard showing elapsed away time. On return, the banner disappears and the tray icon resumes showing the live fried-flow state.
 
 ---
 
-## Displayed score
+## Displayed fried-flow state
 
-Internal `rawScore` ∈ [0, 100]. UI `score` is a rounded EMA:
+Internal `rawScore` remains continuous in [0, 100] for smoothing, insights, and session math. The user-facing UI displays only the fried-flow state derived from the rounded EMA:
 
 \[
 \text{display} \leftarrow \texttt{DISPLAY\_SCORE\_SMOOTH} \cdot \text{display} + (1-\texttt{DISPLAY\_SCORE\_SMOOTH}) \cdot \text{raw}
@@ -326,15 +326,13 @@ Internal `rawScore` ∈ [0, 100]. UI `score` is a rounded EMA:
 
 **Calibration**: Until `CALIBRATION_FRAMES` consecutive face frames with reliable geometry, the engine stays calibrating (`rawScore`/`displayScore` held at 100, all timers cleared).
 
-**Status labels** (based on displayed score):
+**Status labels** (based on displayed internal value):
 
-| Score | Label |
+| Internal value | Label |
 |---|---|
 | ≥ 80 | Locked In |
-| ≥ 65 | Focused |
-| ≥ 50 | Drifting |
-| ≥ 35 | Low Focus |
-| < 35 | Need a Break |
+| ≥ 50 | Steady |
+| < 50 | Fried |
 
 ---
 

@@ -446,18 +446,20 @@ The footer "Check for updates" button still works for manual checks; its label r
 
 ## App icons (`assets/`)
 
-Platform-specific icon assets live in `assets/macOS/` and `assets/windows/`. Both platforms ship light and dark variants:
-
 | File | Used for |
 |---|---|
-| `assets/macOS/icon-dark.icns` | macOS app icon (dark variant), also used as the DMG window icon |
-| `assets/macOS/icon-light.icns` | macOS app icon (light variant) |
-| `assets/macOS/icon-dark-dock.png` | macOS Dock icon (dark) |
-| `assets/macOS/icon-light-dock.png` | macOS Dock icon (light) |
-| `assets/windows/icon-dark.ico` | Windows taskbar / installer icon (dark) |
-| `assets/windows/icon-light.ico` | Windows taskbar / installer icon (light) |
+| `assets/macOS/icon-light-dock.png` | macOS Dock icon (light) — **source of truth** |
+| `assets/macOS/icon-dark-dock.png` | macOS Dock icon (dark) — **source of truth** |
+| `assets/macOS/icon-light.icns` | macOS app icon (light), DMG window icon — generated |
+| `assets/macOS/icon-dark.icns` | macOS app icon (dark) — generated |
+| `assets/macOS/lobi.icon` | macOS 26+ adaptive icon (electron-builder) |
+| `assets/windows/icon-dark.ico` | Windows taskbar / installer icon |
 
-`electron-builder.yml` references `assets/macOS/lobi.icon` (the `.icon` bundle) for the macOS build and `assets/windows/icon-dark.ico` for Windows.
+When you update the dock PNGs, regenerate the `.icns` files with:
+
+```sh
+./scripts/generate-icons.sh
+```
 
 ---
 

@@ -744,6 +744,16 @@
     breakBanner.style.display = (sessionRunning && onBreak) ? 'flex' : 'none'
     if (onBreak) breakBannerTime.textContent = fmtBreakDuration(engine.breakDurationMs)
 
+    if (sessionRunning && onBreak && !breakPausedTracked) {
+      breakPausedTracked = true
+      window.lobi?.track('session_paused', {
+        session_minutes: engine.sessionMinutes,
+        break_duration_ms: engine.breakDurationMs,
+      })
+    } else if (!onBreak) {
+      breakPausedTracked = false
+    }
+
     const score  = engine.score
     const colour = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--yellow)' : 'var(--red)'
 
@@ -837,7 +847,14 @@
 
   // ── Session state machine ────────────────────────────────────────────────
   let sessionRunning = true
+  let breakPausedTracked = false
   const sessionBtn   = document.getElementById('btn-session')
+
+  function trackSessionStarted() {
+    window.lobi?.track('session_started', {
+      start_time: engine.getSessionData().startTime,
+    })
+  }
 
   // End-Session button is disabled while calibrating. Flag avoids redundant DOM writes
   // since onTrackingUpdate fires ~15x/sec.
@@ -881,6 +898,12 @@
     if (engine.isCalibrating) return
 
     const data = engine.getSessionData()
+    window.lobi?.track('session_ended', {
+      duration_ms: data.durationMs,
+      avg_score: data.avgScore,
+      peak_score: data.peakScore,
+      insight_count: data.insightCount,
+    })
 
     // Stop tracking immediately so the camera light turns off
     tracker?.stop()
@@ -920,6 +943,7 @@
 
   async function startNewSession() {
     engine                 = new InsightEngine()
+    breakPausedTracked     = false
     sessionRunning         = true
     sessionLbl.textContent = 'Session: 0m'
     sessionBtn.textContent = 'End Session'
@@ -931,6 +955,7 @@
     try {
       tracker = await Tracker.start(video, onTrackingUpdate, selectedDeviceId)
       refreshCameraList()
+      trackSessionStarted()
     } catch (err) {
       console.error('[lobi] tracker error:', err)
       errorBanner.style.display = 'block'
@@ -974,6 +999,7 @@
       tracker = await Tracker.start(video, onTrackingUpdate, selectedDeviceId)
       refreshCameraList()
       scoreStat.textContent = 'Calibrating...'
+      trackSessionStarted()
     } catch (err) {
       console.error('[lobi] tracker error:', err)
       errorBanner.style.display = 'block'

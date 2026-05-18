@@ -17,7 +17,10 @@ contextBridge.exposeInMainWorld('lobi', {
   hideWindow: () => ipcRenderer.send('hide-window'),
 
   // Called at the end of onboarding — saves the flag and opens the dashboard
-  completeOnboarding: () => ipcRenderer.send('onboarding-done'),
+  completeOnboarding: (opts) => ipcRenderer.send('onboarding-done', opts ?? {}),
+
+  // Analytics — forwarded to PostHog in the main process
+  track: (event, properties) => ipcRenderer.send('analytics-track', { event, properties }),
 
   // Triggers the native macOS camera permission dialog from the main process
   requestCameraPermission: () => ipcRenderer.invoke('request-camera-permission'),

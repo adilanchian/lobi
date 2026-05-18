@@ -22,6 +22,7 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
-    "electron-updater": "^6.8.3"
+    "electron-updater": "^6.8.3",
+    "posthog-node": "^5.34.4"
   }
 }

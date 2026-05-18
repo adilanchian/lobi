@@ -17,6 +17,11 @@ const {
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
+const {
+  capture: captureEvent,
+  shutdown: shutdownPosthog,
+} = require("./analytics/posthog");
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 // Tiny JSON file in the OS userData folder so settings persist across restarts
@@ -48,6 +53,19 @@ function readSessions() {
 function writeSessions(data) {
   fs.mkdirSync(path.dirname(SESSIONS_FILE), { recursive: true });
   fs.writeFileSync(SESSIONS_FILE, JSON.stringify(data, null, 2));
+}
+
+function getDistinctId() {
+  const settings = readSettings();
+  if (!settings.analyticsId) {
+    settings.analyticsId = crypto.randomUUID();
+    writeSettings(settings);
+  }
+  return settings.analyticsId;
+}
+
+function track(event, properties = {}) {
+  captureEvent(getDistinctId(), event, properties);
 }
 
 // ─── Window Factory ───────────────────────────────────────────────────────────
@@ -300,6 +318,10 @@ ipcMain.on("hide-window", (e) =>
 
 ipcMain.on("open-history", openHistory);
 
+ipcMain.on("analytics-track", (_e, { event, properties = {} }) => {
+  track(event, properties);
+});
+
 ipcMain.handle("save-session", (_e, data) => {
   const sessions = readSessions();
   sessions.unshift(data); // newest first
@@ -361,6 +383,7 @@ ipcMain.on(
   (_e, { notificationsEnabled: notifEnabled = true } = {}) => {
     notificationsEnabled = notifEnabled;
     writeSettings({ onboardingDone: true, notificationsEnabled: notifEnabled });
+    if (notifEnabled) track("notifications_enabled");
     onboardingWin?.destroy();
     openDashboard();
   },
@@ -384,6 +407,14 @@ app.whenReady().then(() => {
   const settings = readSettings();
   // Default true so existing users (who never saw the notifications step) keep getting them
   notificationsEnabled = settings.notificationsEnabled !== false;
+
+  track("app_started", {
+    app_version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    is_packaged: app.isPackaged,
+    onboarding_done: !!settings.onboardingDone,
+  });
 
   setupTray();
   updateDockIcon();
@@ -478,4 +509,5 @@ app.on("will-quit", () => {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.destroy();
   }
+  shutdownPosthog();
 });

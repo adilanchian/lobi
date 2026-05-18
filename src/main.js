@@ -317,15 +317,15 @@ ipcMain.on("tray-icon", (_e, dataURL) => {
   tray.setImage(image);
 });
 
-ipcMain.on("dock-icon", (_e, dataURL) => {
-  if (process.platform !== "darwin") return;
-  const buf = Buffer.from(
-    dataURL.replace(/^data:image\/png;base64,/, ""),
-    "base64",
-  );
-  const image = nativeImage.createFromBuffer(buf);
-  app.dock.setIcon(image);
-});
+// ipcMain.on("dock-icon", (_e, dataURL) => {
+//   if (process.platform !== "darwin") return;
+//   const buf = Buffer.from(
+//     dataURL.replace(/^data:image\/png;base64,/, ""),
+//     "base64",
+//   );
+//   const image = nativeImage.createFromBuffer(buf);
+//   app.dock.setIcon(image);
+// });
 
 ipcMain.on("notify", (_e, { title, body }) => sendNotification(title, body));
 

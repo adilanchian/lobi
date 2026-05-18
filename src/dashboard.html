@@ -887,30 +887,24 @@
     breakBanner.style.display = (sessionRunning && onBreak) ? 'flex' : 'none'
     if (onBreak) breakBannerTime.textContent = fmtBreakDuration(engine.breakDurationMs)
 
-    if (sessionRunning && onBreak && !breakPausedTracked) {
-      breakPausedTracked = true
-      window.lobi?.track('session_paused', {
+    if (sessionRunning && onBreak && !breakTracked) {
+      breakTracked = true
+      breakStartTs = Date.now()
+      window.lobi?.track('session_break_start', {
         session_minutes: engine.sessionMinutes,
-        break_duration_ms: engine.breakDurationMs,
       })
-    } else if (!onBreak) {
-      breakPausedTracked = false
+    } else if (!onBreak && breakTracked) {
+      breakTracked = false
+      window.lobi?.track('session_break_end', {
+        session_minutes: engine.sessionMinutes,
+        break_duration_ms: breakStartTs ? Date.now() - breakStartTs : null,
+      })
+      breakStartTs = null
     }
 
     const flowState = engine.flowState
     const faceGone = !data.facePresent
     const dashboardDisabled = sessionRunning && faceGone
-
-    // Track session pause when dashboard is disabled
-    if (sessionRunning && dashboardDisabled && !breakPausedTracked) {
-      breakPausedTracked = true
-      window.lobi?.track('session_paused', {
-        session_minutes: engine.sessionMinutes,
-        break_duration_ms: engine.breakDurationMs,
-      })
-    } else if (!dashboardDisabled) {
-      breakPausedTracked = false
-    }
 
     const score  = engine.score
     const colour = score >= 70 ? 'var(--green)' : score >= 40 ? 'var(--yellow)' : 'var(--red)'
@@ -1010,7 +1004,8 @@
 
   // ── Session state machine ────────────────────────────────────────────────
   let sessionRunning = true
-  let breakPausedTracked = false
+  let breakTracked = false
+  let breakStartTs = null
   const sessionBtn   = document.getElementById('btn-session')
 
   function trackSessionStarted() {
@@ -1105,9 +1100,9 @@
 
   async function startNewSession() {
     engine                 = new InsightEngine()
-    breakPausedTracked     = false
+    breakTracked           = false
+    breakStartTs           = null
     engine.setInterventionPreferences(interventionPreferences)
-    breakPausedTracked     = false
     sessionRunning         = true
     setDashboardDisabled(false)
     sessionLbl.textContent = 'Session: 0m'

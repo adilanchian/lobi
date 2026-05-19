@@ -293,7 +293,7 @@
 
   <!-- ── Fried-flow state ────────────────────────────────────────────────── -->
   <div class="state-header">
-    <div class="lobi-face" id="lobi-face" aria-hidden="true"><span class="face-mouth"></span></div>
+    <img id="lobi-face" src="assets/face-locked.png" alt="Focus face" style="width:54px; height:54px;" aria-hidden="true">
     <span class="ring-number" id="score-number">--</span>
   </div>
 
@@ -582,21 +582,26 @@
     return 'var(--red)'
   }
 
-  function flowFaceClass(state) {
+  const FACE_SRCS = {
+    locked:  'assets/face-locked.png',
+    steady:  'assets/face-steady.png',
+    fried:   'assets/face-fried.png',
+  }
+
+  function flowFaceKey(state) {
     if (state === 'Locked In') return 'locked'
     if (state === 'Steady') return 'steady'
     return 'fried'
   }
 
   function setDashboardFace(state, calibrating = false) {
-    lobiFace.className = calibrating
-      ? 'lobi-face'
-      : `lobi-face ${flowFaceClass(state)}`
+    lobiFace.src = calibrating ? FACE_SRCS.steady : FACE_SRCS[flowFaceKey(state)]
+    lobiFace.style.opacity = '1'
   }
 
   function setDashboardDisabled(disabled) {
     dashboardPage.classList.toggle('face-disabled', disabled)
-    if (disabled) lobiFace.className = 'lobi-face disabled'
+    lobiFace.style.opacity = disabled ? '0.35' : '1'
   }
 
   // EMA-smoothed targets for the 4 high-level bars. The engine tick (~15/s)

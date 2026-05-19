@@ -156,10 +156,8 @@ function openDashboard() {
 }
 
 function openOnboarding() {
-  onboardingWin = createWindow("onboarding.html", 640, 820, {
-    resizable: true,
-    minWidth: 440,
-    minHeight: 560,
+  onboardingWin = createWindow("onboarding.html", 480, 615, {
+    resizable: false,
   });
 }
 

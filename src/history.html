@@ -39,13 +39,14 @@
     }
 
     .session-score {
-      font-size: 26px;
+      font-size: 11px;
       font-weight: 800;
-      letter-spacing: -1px;
+      letter-spacing: 0;
       line-height: 1;
       flex-shrink: 0;
-      width: 42px;
+      width: 72px;
       text-align: center;
+      white-space: nowrap;
     }
 
     .session-meta {
@@ -147,8 +148,16 @@
 </div>
 
 <script>
-  function scoreColour(s) {
-    return s >= 70 ? 'var(--green)' : s >= 40 ? 'var(--yellow)' : 'var(--red)'
+  function flowStateFor(score) {
+    if (score >= 80) return 'Locked In'
+    if (score >= 50) return 'Steady'
+    return 'Fried'
+  }
+
+  function flowColour(state) {
+    if (state === 'Locked In') return 'var(--green)'
+    if (state === 'Steady') return 'var(--yellow)'
+    return 'var(--red)'
   }
 
   function formatDuration(ms) {
@@ -190,9 +199,11 @@
 
     list.innerHTML = sessions.map(s => {
       const displayTitle = s.title || formatDate(s.startTime)
+      const avgState = s.avgFlowState || flowStateFor(s.avgScore ?? 0)
+      const peakState = s.peakFlowState || flowStateFor(s.peakScore ?? 0)
       return `
       <div class="session-card" data-start="${s.startTime}" data-title="${s.title ?? ''}">
-        <div class="session-score" style="color:${scoreColour(s.avgScore)}">${s.avgScore}</div>
+        <div class="session-score" style="color:${flowColour(avgState)}">${avgState}</div>
         <div class="session-meta">
           <div class="session-title-row">
             <span class="session-title">${displayTitle}</span>
@@ -201,8 +212,8 @@
           <div class="session-details">${formatDuration(s.durationMs)} · ${s.insightCount} insight${s.insightCount !== 1 ? 's' : ''}</div>
         </div>
         <div class="session-peak">
-          <div style="font-size:10px; margin-bottom:2px;">Peak</div>
-          <div style="font-weight:700; color:${scoreColour(s.peakScore)}">${s.peakScore}</div>
+          <div style="font-size:10px; margin-bottom:2px;">Peak Flow</div>
+          <div style="font-weight:700; color:${flowColour(peakState)}">${peakState}</div>
         </div>
       </div>
     `}).join('')

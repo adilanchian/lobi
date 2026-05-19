@@ -1,6 +1,6 @@
 {
   "fill" : {
-    "solid" : "srgb:0.87843,0.87843,0.87843,1.00000"
+    "solid" : "srgb:1.00000,0.98824,0.95294,1.00000"
   },
   "groups" : [
     {
@@ -8,8 +8,21 @@
       "hidden" : false,
       "layers" : [
         {
-          "image-name" : "smiley-face.png",
-          "name" : "smiley-face"
+          "fill-specializations" : [
+            {
+              "value" : {
+                "solid" : "srgb:0.20392,0.82745,0.60000,1.00000"
+              }
+            },
+            {
+              "appearance" : "light",
+              "value" : {
+                "solid" : "srgb:0.21961,0.21961,0.21961,1.00000"
+              }
+            }
+          ],
+          "image-name" : "Light Mode - Flow 1 (icon) 2.png",
+          "name" : "Light Mode - Flow 1 (icon) 2"
         }
       ],
       "shadow" : {

@@ -17,6 +17,11 @@ const {
 const { autoUpdater } = require("electron-updater");
 const path = require("path");
 const fs = require("fs");
+const crypto = require("crypto");
+const {
+  capture: captureEvent,
+  shutdown: shutdownPosthog,
+} = require("./analytics/posthog");
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 // Tiny JSON file in the OS userData folder so settings persist across restarts
@@ -26,7 +31,10 @@ const SESSIONS_FILE = path.join(app.getPath("userData"), "sessions.json");
 
 function readSettings() {
   try {
-    return JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8"));
+    return {
+      onboardingDone: false,
+      ...JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf8")),
+    };
   } catch {
     return { onboardingDone: false };
   }
@@ -50,6 +58,25 @@ function writeSessions(data) {
   fs.writeFileSync(SESSIONS_FILE, JSON.stringify(data, null, 2));
 }
 
+function getDistinctId() {
+  const settings = readSettings();
+  if (!settings.analyticsId) {
+    settings.analyticsId = crypto.randomUUID();
+    writeSettings(settings);
+  }
+  return settings.analyticsId;
+}
+
+function track(event, properties = {}) {
+  // In dev (unpackaged) we only log to console so PostHog isn't polluted with
+  // local test runs. Production builds capture as normal.
+  if (!app.isPackaged) {
+    console.log("[analytics:dev]", event, properties);
+    return;
+  }
+  captureEvent(getDistinctId(), event, properties);
+}
+
 // ─── Window Factory ───────────────────────────────────────────────────────────
 
 /** `opts` are BrowserWindow options (e.g. resizable, minWidth). Use `webPreferences` inside opts only for renderer overrides. */
@@ -58,7 +85,7 @@ function createWindow(htmlFile, width, height, opts = {}) {
   const win = new BrowserWindow({
     width,
     height,
-    backgroundColor: "#0e0e16",
+    backgroundColor: "#fffcf3",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     ...bwOpts,
     webPreferences: {
@@ -135,10 +162,8 @@ function openDashboard() {
 }
 
 function openOnboarding() {
-  onboardingWin = createWindow("onboarding.html", 640, 820, {
-    resizable: true,
-    minWidth: 440,
-    minHeight: 560,
+  onboardingWin = createWindow("onboarding.html", 480, 615, {
+    resizable: false,
   });
 }
 
@@ -219,19 +244,31 @@ function rebuildTrayMenu() {
 function updateDockIcon() {
   const dark = nativeTheme.shouldUseDarkColors;
   if (process.platform === "darwin") {
-    const iconPath = path.join(__dirname, "..", "assets", "macOS", `${dark ? "icon-dark" : "icon-light"}-dock.png`);
+    const iconPath = path.join(
+      __dirname,
+      "..",
+      "assets",
+      "macOS",
+      `${dark ? "icon-dark" : "icon-light"}-dock.png`,
+    );
     app.dock.setIcon(iconPath);
   } else if (process.platform === "win32") {
-    const iconPath = path.join(__dirname, "..", "assets", "windows", `${dark ? "icon-dark" : "icon-light"}.ico`);
+    const iconPath = path.join(
+      __dirname,
+      "..",
+      "assets",
+      "windows",
+      `${dark ? "icon-dark" : "icon-light"}.ico`,
+    );
     for (const win of BrowserWindow.getAllWindows()) win.setIcon(iconPath);
   }
 }
 
 function setupTray() {
-  // Start with an empty icon — the dashboard will push a live score image once tracking starts
+  // Start with an empty icon — the dashboard will push a live fried-flow image once tracking starts
   tray = new Tray(nativeImage.createEmpty());
 
-  // macOS: brain emoji anchors the tray item while the score icon loads
+  // macOS: brain emoji anchors the tray item while the fried-flow icon loads
   if (process.platform === "darwin") tray.setTitle("");
 
   buildTrayMenu();
@@ -284,6 +321,16 @@ ipcMain.on("tray-icon", (_e, dataURL) => {
   tray.setImage(image);
 });
 
+// ipcMain.on("dock-icon", (_e, dataURL) => {
+//   if (process.platform !== "darwin") return;
+//   const buf = Buffer.from(
+//     dataURL.replace(/^data:image\/png;base64,/, ""),
+//     "base64",
+//   );
+//   const image = nativeImage.createFromBuffer(buf);
+//   app.dock.setIcon(image);
+// });
+
 ipcMain.on("notify", (_e, { title, body }) => sendNotification(title, body));
 
 ipcMain.on("tray-status", (_e, status) => setTrayStatus(status));
@@ -299,6 +346,12 @@ ipcMain.on("hide-window", (e) =>
 );
 
 ipcMain.on("open-history", openHistory);
+
+ipcMain.on("analytics-track", (_e, { event, properties = {} }) => {
+  track(event, properties);
+});
+
+ipcMain.handle("get-settings", () => readSettings());
 
 ipcMain.handle("save-session", (_e, data) => {
   const sessions = readSessions();
@@ -350,7 +403,7 @@ app.whenReady().then(() => {
 });
 
 ipcMain.on("reset-onboarding", () => {
-  writeSettings({ onboardingDone: false });
+  writeSettings({ ...readSettings(), onboardingDone: false });
   mainWindow?.destroy();
   mainWindow = null;
   openOnboarding();
@@ -358,9 +411,21 @@ ipcMain.on("reset-onboarding", () => {
 
 ipcMain.on(
   "onboarding-done",
-  (_e, { notificationsEnabled: notifEnabled = true } = {}) => {
+  (
+    _e,
+    {
+      notificationsEnabled: notifEnabled = true,
+      interventionPreferences = [],
+    } = {},
+  ) => {
     notificationsEnabled = notifEnabled;
-    writeSettings({ onboardingDone: true, notificationsEnabled: notifEnabled });
+    writeSettings({
+      ...readSettings(),
+      onboardingDone: true,
+      notificationsEnabled: notifEnabled,
+      interventionPreferences,
+    });
+    if (notifEnabled) track("notifications_enabled");
     onboardingWin?.destroy();
     openDashboard();
   },
@@ -384,6 +449,14 @@ app.whenReady().then(() => {
   const settings = readSettings();
   // Default true so existing users (who never saw the notifications step) keep getting them
   notificationsEnabled = settings.notificationsEnabled !== false;
+
+  track("app_started", {
+    app_version: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    is_packaged: app.isPackaged,
+    onboarding_done: !!settings.onboardingDone,
+  });
 
   setupTray();
   updateDockIcon();
@@ -478,4 +551,5 @@ app.on("will-quit", () => {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) win.destroy();
   }
+  shutdownPosthog();
 });

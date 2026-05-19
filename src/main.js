@@ -68,6 +68,12 @@ function getDistinctId() {
 }
 
 function track(event, properties = {}) {
+  // In dev (unpackaged) we only log to console so PostHog isn't polluted with
+  // local test runs. Production builds capture as normal.
+  if (!app.isPackaged) {
+    console.log("[analytics:dev]", event, properties);
+    return;
+  }
   captureEvent(getDistinctId(), event, properties);
 }
 
@@ -79,7 +85,7 @@ function createWindow(htmlFile, width, height, opts = {}) {
   const win = new BrowserWindow({
     width,
     height,
-    backgroundColor: "#0e0e16",
+    backgroundColor: "#fffcf3",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     ...bwOpts,
     webPreferences: {
@@ -346,9 +352,6 @@ ipcMain.on("analytics-track", (_e, { event, properties = {} }) => {
 });
 
 ipcMain.handle("get-settings", () => readSettings());
-ipcMain.on("analytics-track", (_e, { event, properties = {} }) => {
-  track(event, properties);
-});
 
 ipcMain.handle("save-session", (_e, data) => {
   const sessions = readSessions();

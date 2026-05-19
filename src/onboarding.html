@@ -47,9 +47,9 @@
   <div class="step active" id="step-1">
     <div class="step-content">
       <div class="faces-illustration">
-        <img src="assets/face-fried.png"  alt="Fried face"  class="face-fried">
-        <img src="assets/face-locked.png" alt="Happy face"  class="face-locked">
-        <img src="assets/face-steady.png" alt="Steady face" class="face-steady">
+        <img src="assets/face-fried.svg"  alt="Fried face"  class="face-fried">
+        <img src="assets/face-locked.svg" alt="Happy face"  class="face-locked">
+        <img src="assets/face-steady.svg" alt="Steady face" class="face-steady">
       </div>
 
       <h1>Hey, I'm Lobi.</h1>
@@ -81,13 +81,13 @@
         <label class="intervention-chip"><input type="checkbox" name="intervention" value="snack">Eat a snack</label>
       </div>
     </div>
-    <button class="btn-primary no-drag" onclick="goTo(3)">Continue</button>
+    <button class="btn-primary no-drag" onclick="confirmInterventions()">Continue</button>
   </div>
 
   <!-- ── Step 3: Camera ───────────────────────────────────────────────────── -->
   <div class="step" id="step-3">
     <div class="step-content">
-      <div class="step-icon">📷</div>
+      <img src="assets/camera.svg" alt="Camera" class="step-icon" style="width:52px; height:52px; align-self:flex-start;">
       <h1>Help me understand your focus patterns</h1>
       <p>
         Lobi uses blink rate and eye strain patterns to gently estimate when your focus or
@@ -123,7 +123,7 @@
       <div style="display:flex; flex-direction:column; gap:10px; margin-top:4px;">
         <div class="notif-card">
           <div class="notif-card-face">
-            <img src="assets/face-fried.png" alt="Fried face" style="width:100px; height:100px;">
+            <img src="assets/face-fried.svg" alt="Fried face" style="width:42px; height:42px;">
           </div>
           <div>
             <div class="notif-card-title">Focus is fading</div>
@@ -133,7 +133,7 @@
 
         <div class="notif-card">
           <div class="notif-card-face">
-            <img src="assets/face-locked.png" alt="Happy face" style="width:100px; height:100px;">
+            <img src="assets/face-locked.svg" alt="Happy face" style="width:42px; height:42px;">
           </div>
           <div>
             <div class="notif-card-title">You're in flow</div>
@@ -155,10 +155,7 @@
   <!-- ── Step 5: Menu bar ────────────────────────────────────────────────── -->
   <div class="step" id="step-5">
     <div class="step-content">
-      <!-- Replace src with actual menubar screenshot asset -->
-      <img src="assets/menubar-preview.png" alt="Lobi in the macOS menu bar"
-           class="menubar-preview"
-           onerror="this.style.display='none'">
+      <img src="assets/toolbar.png" alt="Lobi in the macOS menu bar" class="menubar-preview">
 
       <h1>Your mental snapshot lives up here</h1>
       <p>
@@ -244,6 +241,15 @@
   function selectedInterventions() {
     return Array.from(document.querySelectorAll('input[name="intervention"]:checked'))
       .map(input => input.value)
+  }
+
+  function confirmInterventions() {
+    const interventions = selectedInterventions()
+    window.lobi?.track('onboarding_interventions_selected', {
+      interventions,
+      count: interventions.length,
+    })
+    goTo(3)
   }
 
   async function startCamera() {

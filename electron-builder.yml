@@ -4,12 +4,6 @@ productName: Lobi
 directories:
   output: dist
 
-files:
-  - src/**/*
-  - assets/**/*
-  - scripts/**/*
-  - package.json
-
 # ── macOS ────────────────────────────────────────────────────────────────────
 mac:
   category: public.app-category.productivity

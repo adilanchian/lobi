@@ -5,10 +5,28 @@
 #   ./scripts/release.sh          # patch bump (1.0.0 → 1.0.1)
 #   ./scripts/release.sh minor    # minor bump (1.0.0 → 1.1.0)
 #   ./scripts/release.sh major    # major bump (1.0.0 → 2.0.0)
+#   ./scripts/release.sh --skip-tests
+#   ./scripts/release.sh minor --skip-tests
 
 set -e
 
-BUMP=${1:-patch}
+BUMP=patch
+SKIP_TESTS=false
+
+for arg in "$@"; do
+  case "$arg" in
+    patch|minor|major)
+      BUMP=$arg
+      ;;
+    --skip-tests)
+      SKIP_TESTS=true
+      ;;
+    *)
+      echo "❌  Unknown argument: '$arg'. Use patch, minor, major, or --skip-tests."
+      exit 1
+      ;;
+  esac
+done
 
 # Load local release credentials when present. Values still need to be shell-safe:
 # KEY=value, with quotes around values that contain spaces.
@@ -42,6 +60,15 @@ if ! command -v wine &>/dev/null; then
   brew install --cask --quiet wine-stable
 fi
 
+# ── Tests ─────────────────────────────────────────────────────────────────────
+
+if [[ "$SKIP_TESTS" == "true" ]]; then
+  echo "⚠️   Skipping tests because --skip-tests was provided."
+else
+  echo "🧪  Running tests before release..."
+  npm test
+fi
+
 # ── Bump version ──────────────────────────────────────────────────────────────
 
 echo "🔢  Bumping $BUMP version..."
@@ -54,11 +81,11 @@ echo "📦  Building Lobi v$VERSION for macOS + Windows"
 
 echo ""
 echo "🍎  Building macOS (sign + notarize + publish)..."
-npm run publish:mac
+npx electron-builder --mac --publish always
 
 echo ""
 echo "🪟  Building Windows (publish)..."
-npm run publish:win
+npx electron-builder --win --publish always
 
 echo ""
 echo "✅  Lobi v$VERSION published to GitHub Releases."
